@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import { getLLMSettings, updateLLMSettings } from "../api/settings";
 import type { LLMProvider, LLMSettingsRead } from "../api/types";
+import { VoiceSettings } from "../components/settings/VoiceSettings";
 
 const PROVIDERS: { value: LLMProvider; label: string; needsKey: boolean }[] = [
   { value: "ollama", label: "Ollama (local, no API key)", needsKey: false },
@@ -184,6 +185,10 @@ export function SettingsPage() {
         >
           {mutation.isPending ? "Saving…" : "Save"}
         </button>
+      </div>
+
+      <div className="mt-6">
+        <VoiceSettings />
       </div>
     </div>
   );

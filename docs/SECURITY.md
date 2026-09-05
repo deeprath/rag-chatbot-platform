@@ -175,16 +175,48 @@ coverage report paths, exclusions — is written and the coverage reports it
 needs are proven to generate correctly; only the server-side connection is
 unverified here.
 
-## Voice chat: no audio leaves the browser
+## Voice chat
 
-Speech-to-text and text-to-speech (see
-[`frontend/README.md`](../frontend/README.md#voice-chat)) use only the
-browser's built-in `SpeechRecognition`/`speechSynthesis` APIs — deliberately,
-so no recorded audio or transcript is ever sent to our backend or a
-third-party speech API. The one caveat worth knowing: Chrome's own
+Speech-to-text is always the browser's built-in `SpeechRecognition` (see
+[`frontend/README.md`](../frontend/README.md#voice-chat)) — no recorded audio
+ever reaches our backend. The one caveat worth knowing: Chrome's own
 `SpeechRecognition` implementation sends the captured audio to Google's
 servers for recognition (that's how Chrome does it, not something this app
 adds) — Firefox has no implementation at all, and Safari's is on-device.
+
+Text-to-speech has two modes, with different data-flow implications:
+- **Standard (device voice)**: `speechSynthesis`, entirely client-side — the
+  message text never leaves the browser just to be read aloud.
+- **Natural (AI voice)**, English only: the message text *is* sent — to
+  `POST /api/v1/speech/tts` (authenticated, same as every other endpoint),
+  which forwards it to Groq's API to synthesize real audio (see
+  [`backend/app/services/tts_service.py`](../backend/app/services/tts_service.py)).
+  This is a deliberate, visible opt-in (the Settings page's "Reply voice"
+  choice), not a default — choosing "Standard" instead keeps every part of
+  voice chat fully client-side, same as before this mode existed.
+
+Per-user Groq API keys used for this reuse the exact same encryption-at-rest
+as the per-user LLM keys above (`resolve_groq_api_key` — see
+[`app/services/llm_provider.py`](../backend/app/services/llm_provider.py)) —
+independent of whichever provider that user has chosen for *chat*, so
+someone chatting via Anthropic can still save a Groq key just for AI voice.
+
+**Two real bugs this feature exposed in the existing security headers**
+(both from the ZAP-hardening pass in Phase 9, written before voice chat
+existed, and never revisited when it was added) — caught by actually
+clicking the 🔊 button and the 🎤 button against the real nginx headers, not
+by unit tests, which mock `fetch`/`getUserMedia` and never exercise them:
+- `Content-Security-Policy` had no `media-src`, so it fell back to
+  `default-src 'self'` — which does not cover `blob:` — silently blocking
+  the `<audio>` element `useAiVoice.ts` plays the fetched TTS response
+  through (`URL.createObjectURL`). Fixed by adding `media-src 'self' blob:`
+  in [`security-headers.conf.template`](../frontend/security-headers.conf.template).
+- `Permissions-Policy` shipped `microphone=()` — disabling the microphone
+  feature for every origin, including the app's own — which would have
+  silently broken the 🎤 button's `SpeechRecognition.start()` on any real
+  HTTPS deployment (the sandboxed dev browser used for most of this session
+  masked it, since it blocks mic access itself regardless of headers).
+  Fixed to `microphone=(self)`.
 
 ## Local setup
 

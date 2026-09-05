@@ -48,33 +48,57 @@ npm run lint
 
 ## Voice chat
 
-Speech-to-text (the composer's 🎤 button) and text-to-speech (each assistant
-message's 🔊 button, plus a "Read replies aloud" toggle for automatic
-playback) are both the browser's own native Web Speech API —
-`SpeechRecognition`/`webkitSpeechRecognition` and `speechSynthesis`. No audio
-or transcript is ever sent to our backend or any third party for this.
+Three pieces, each with its own fallback story:
 
-- **Speech-to-text needs Chrome/Edge** (and partially Safari) — Firefox
-  doesn't implement `SpeechRecognition` at all. `useSpeechRecognition`
-  feature-detects this and the composer disables the mic button (with a
-  tooltip) rather than pretend it works everywhere.
-- **Text-to-speech is broadly supported** (Chrome, Firefox, Safari, Edge) via
-  `useSpeechSynthesis`.
-- Both need a **secure context** — `localhost` is fine for dev, but a real
-  deployment needs HTTPS for the mic (`SpeechRecognition.start()`) to work at
-  all; browsers refuse microphone access on plain HTTP for any non-localhost
-  origin.
-- The "Read replies aloud" preference is a per-viewer `localStorage` value
-  (`rag-chatbot:auto-speak-replies`), not synced across devices or sent to
-  the backend — see `src/pages/ChatPage.tsx`.
+- **Speech-to-text** (the composer's 🎤, and what drives "voice conversation"
+  mode below): the browser's native `SpeechRecognition`/
+  `webkitSpeechRecognition` — entirely client-side, nothing sent to our
+  backend. **Needs Chrome/Edge** (and partially Safari) — Firefox doesn't
+  implement it at all; `useSpeechRecognition` feature-detects this and
+  disables the mic button (with a tooltip) rather than pretend it works
+  everywhere.
+- **Text-to-speech, "Standard (device)" mode**: the browser's native
+  `speechSynthesis` — also entirely client-side, broadly supported (Chrome,
+  Firefox, Safari, Edge). The only option for Hindi (see below).
+- **Text-to-speech, "Natural (AI)" mode, English only**: a real backend call
+  (`POST /api/v1/speech/tts`, see
+  [`../backend/app/services/tts_service.py`](../backend/app/services/tts_service.py))
+  to Groq's Orpheus model for an actually human-sounding voice, using either
+  your own saved Groq key (Settings page) or the deployment's `GROQ_API_KEY`.
+  `useVoiceOutput` picks this vs. the device voice based on the Settings
+  page's choice, and **transparently falls back to the device voice** if the
+  AI call fails for any reason (no key, network error, Groq's model needing
+  a one-time terms-acceptance step in your Groq console — see
+  `tts_service.py`'s module docstring) rather than going silent.
+
+Both speech-to-text and speech-synthesis need a **secure context** —
+`localhost` is fine for dev, but a real deployment needs HTTPS for the mic
+(`SpeechRecognition.start()`) to work at all; browsers refuse microphone
+access on plain HTTP for any non-localhost origin.
+
+**Voice conversation mode** (`useVoiceConversation`, the chat page's "🎙️
+Start voice conversation" button) chains the above into a hands-free loop:
+listen → on a pause (same as a real conversation) send what was heard →
+speak the reply → listen again — until you stop it. It's built entirely from
+`useSpeechRecognition` + `useVoiceOutput`; the loop/turn-taking itself is
+just a small state machine (`idle` → `listening` → `thinking` → `speaking` →
+back to `listening`), no separate infrastructure.
+
+Language, reply-voice mode, and the "read replies aloud automatically"
+toggle are per-viewer `localStorage` preferences (`useVoicePreferences`), set
+on the Settings page, read wherever something gets spoken — not synced
+across devices or sent to the backend (the *choice* isn't; the actual reply
+text is, whenever AI voice is used, since that's what gets synthesized).
 
 ## Structure
 
 ```
 src/
-  api/         axios client, per-resource API calls, the hand-rolled SSE client (sse.ts)
+  api/         axios client, per-resource API calls, the hand-rolled SSE client (sse.ts), speech.ts (AI voice)
   auth/        Keycloak (keycloak-js) integration — AuthProvider, useAuth()
-  components/  Reusable UI (chat/, documents/, Layout)
-  hooks/       useSpeechRecognition / useSpeechSynthesis (voice chat, browser-native)
+  components/  Reusable UI (chat/, documents/, settings/, Layout)
+  hooks/       Voice chat: useSpeechRecognition, useSpeechSynthesis, useAiVoice,
+               useVoiceOutput (picks between the two + fallback), useVoicePreferences,
+               useVoiceConversation (the hands-free conversation loop)
   pages/       Route-level components (ChatPage, DocumentsPage, SettingsPage)
 ```

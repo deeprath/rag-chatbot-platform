@@ -142,6 +142,20 @@ async def resolve_chat_model(db: AsyncSession, owner_id: str) -> BaseChatModel:
     return _build_chat_model(base_settings.model_copy(update=overrides))
 
 
+async def resolve_groq_api_key(db: AsyncSession, owner_id: str) -> str | None:
+    """The Groq API key to use for a Groq-only capability (currently: AI voice —
+    see app/services/tts_service.py) that's independent of whichever provider
+    the user has chosen for *chat*. Someone chatting via Anthropic can still
+    have their own Groq key saved and use it for voice — this intentionally
+    doesn't look at `user_row.provider` at all, only whether a Groq key exists.
+    """
+    base_settings = get_settings()
+    user_row = await llm_settings_repository.get_settings(db, owner_id)
+    if user_row and user_row.encrypted_groq_key:
+        return decrypt_secret(user_row.encrypted_groq_key, base_settings)
+    return base_settings.groq_api_key
+
+
 async def check_ollama_available(settings: Settings | None = None) -> bool:
     """Live reachability check for the (optional, resource-heavy — see
     infra/Makefile) local Ollama server, so the Settings UI can grey out that

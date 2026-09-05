@@ -50,14 +50,17 @@ flowchart LR
   things to keep in sync for no benefit. Kong's job here is routing, CORS,
   and rate-limiting only. See
   [`infra/kong/README.md`](../infra/kong/README.md).
-- **Voice chat (speech-to-text/text-to-speech) is entirely browser-native**
-  (`SpeechRecognition`/`speechSynthesis`, see
+- **Voice chat's speech-to-text is entirely browser-native**
+  (`SpeechRecognition`, see
   [`frontend/README.md`](../frontend/README.md#voice-chat)) — no backend
-  endpoint, no third-party API, no audio ever leaves the browser. The
-  tradeoff is browser support (`SpeechRecognition` is Chrome/Edge-only) and
-  voice quality (native TTS voices, not an AI voice) — a deliberate choice to
-  avoid adding a paid API dependency and a new attack/privacy surface for
-  what's fundamentally an input/output convenience, not a core feature.
+  endpoint, no audio ever leaves the browser to us. Text-to-speech defaults
+  to the same approach (`speechSynthesis`) but also offers an opt-in "Natural
+  (AI)" mode (English only) through a small backend endpoint to Groq's
+  Orpheus model for an actually human-sounding voice — a real tradeoff
+  (network round trip, per-call cost, the reply text leaving the browser)
+  the device voice avoids, which is why it stays the non-AI option rather
+  than being replaced outright, and why AI voice transparently falls back to
+  it on any failure instead of going silent.
 - **Keycloak gets its own Ingress host**, not a path prefix under the app's
   host — it has too many top-level paths (`/realms`, `/admin`, `/resources`,
   `/js`, ...) to enumerate as ingress rules. This is also *why* the backend

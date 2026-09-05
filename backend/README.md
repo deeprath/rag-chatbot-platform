@@ -29,7 +29,8 @@ everything else — including `LLM_PROVIDER=ollama`, no key at all — works wit
 | POST | `/chat` | Ask a question; streams the answer back as Server-Sent Events |
 | GET | `/chat/sessions`, `/chat/sessions/{id}/messages` | Browse chat history |
 | GET | `/settings/llm` | Current LLM provider + whether a key is saved (masked preview only) |
-| PUT | `/settings/llm` | Choose a provider (`anthropic`/`openai`/`ollama`) and, if needed, save an API key — encrypted at rest, never returned; see [`../docs/SECURITY.md`](../docs/SECURITY.md) |
+| PUT | `/settings/llm` | Choose a provider (`anthropic`/`openai`/`groq`/`ollama`) and, if needed, save an API key — encrypted at rest, never returned; see [`../docs/SECURITY.md`](../docs/SECURITY.md) |
+| POST | `/speech/tts` | AI voice (English only) — Groq's Orpheus model, real human-sounding audio; see [`app/services/tts_service.py`](app/services/tts_service.py) |
 
 All routes are scoped by owner via the `sub` claim of a verified Keycloak JWT
 (`Authorization: Bearer ...`) — see [`app/core/security.py`](app/core/security.py).

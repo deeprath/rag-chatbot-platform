@@ -1,5 +1,5 @@
 import type { MessageRole } from "../../api/types";
-import { useSpeechSynthesis } from "../../hooks/useSpeechSynthesis";
+import { useVoiceOutput } from "../../hooks/useVoiceOutput";
 
 interface MessageBubbleProps {
   role: MessageRole;
@@ -9,7 +9,7 @@ interface MessageBubbleProps {
 
 export function MessageBubble({ role, content, pending }: MessageBubbleProps) {
   const isUser = role === "user";
-  const { isSupported, isSpeaking, speak, stop } = useSpeechSynthesis();
+  const { isSupported, isLoading, isSpeaking, speak, stop } = useVoiceOutput();
   // Only offer read-aloud once a reply has actually finished — reading a
   // still-streaming answer out loud would race the text being appended to.
   const canSpeak = !isUser && !pending && isSupported && content.trim().length > 0;
@@ -30,14 +30,15 @@ export function MessageBubble({ role, content, pending }: MessageBubbleProps) {
         {canSpeak && (
           <button
             type="button"
-            onClick={() => (isSpeaking ? stop() : speak(content))}
+            onClick={() => (isSpeaking ? stop() : void speak(content))}
+            disabled={isLoading}
             title={isSpeaking ? "Stop reading aloud" : "Read aloud"}
             aria-label={isSpeaking ? "Stop reading aloud" : "Read message aloud"}
-            className={`shrink-0 rounded p-0.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 ${
+            className={`shrink-0 rounded p-0.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 disabled:cursor-wait ${
               isSpeaking ? "text-slate-900 opacity-100" : "text-slate-400 hover:text-slate-600"
             }`}
           >
-            {isSpeaking ? "⏹️" : "🔊"}
+            {isLoading ? "⏳" : isSpeaking ? "⏹️" : "🔊"}
           </button>
         )}
       </div>

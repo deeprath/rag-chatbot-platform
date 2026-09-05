@@ -2,15 +2,17 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-const { useSpeechSynthesis } = vi.hoisted(() => ({ useSpeechSynthesis: vi.fn() }));
-vi.mock("../src/hooks/useSpeechSynthesis", () => ({ useSpeechSynthesis }));
+const { useVoiceOutput } = vi.hoisted(() => ({ useVoiceOutput: vi.fn() }));
+vi.mock("../src/hooks/useVoiceOutput", () => ({ useVoiceOutput }));
 
 import { MessageBubble } from "../src/components/chat/MessageBubble";
 
-function mockSynthesis(overrides: Partial<ReturnType<typeof useSpeechSynthesis>> = {}) {
-  useSpeechSynthesis.mockReturnValue({
+function mockVoiceOutput(overrides: Partial<ReturnType<typeof useVoiceOutput>> = {}) {
+  useVoiceOutput.mockReturnValue({
     isSupported: true,
+    isLoading: false,
     isSpeaking: false,
+    aiVoiceError: null,
     speak: vi.fn(),
     stop: vi.fn(),
     ...overrides,
@@ -19,38 +21,38 @@ function mockSynthesis(overrides: Partial<ReturnType<typeof useSpeechSynthesis>>
 
 describe("MessageBubble", () => {
   it("renders message content", () => {
-    mockSynthesis();
+    mockVoiceOutput();
     render(<MessageBubble role="assistant" content="Hello there" />);
     expect(screen.getByText("Hello there")).toBeInTheDocument();
   });
 
   it("offers a read-aloud button for a finished assistant message", () => {
-    mockSynthesis();
+    mockVoiceOutput();
     render(<MessageBubble role="assistant" content="Hello there" />);
     expect(screen.getByRole("button", { name: /read message aloud/i })).toBeInTheDocument();
   });
 
   it("does not offer read-aloud for the user's own messages", () => {
-    mockSynthesis();
+    mockVoiceOutput();
     render(<MessageBubble role="user" content="What's up" />);
     expect(screen.queryByRole("button", { name: /read message aloud/i })).not.toBeInTheDocument();
   });
 
   it("does not offer read-aloud while the reply is still streaming", () => {
-    mockSynthesis();
+    mockVoiceOutput();
     render(<MessageBubble role="assistant" content="Still typ" pending />);
     expect(screen.queryByRole("button", { name: /read message aloud/i })).not.toBeInTheDocument();
   });
 
-  it("does not offer read-aloud when speech synthesis isn't supported", () => {
-    mockSynthesis({ isSupported: false });
+  it("does not offer read-aloud when no voice output is supported", () => {
+    mockVoiceOutput({ isSupported: false });
     render(<MessageBubble role="assistant" content="Hello there" />);
     expect(screen.queryByRole("button", { name: /read message aloud/i })).not.toBeInTheDocument();
   });
 
   it("clicking the button speaks the message content", async () => {
     const speak = vi.fn();
-    mockSynthesis({ speak });
+    mockVoiceOutput({ speak });
     const user = userEvent.setup();
     render(<MessageBubble role="assistant" content="Hello there" />);
 
@@ -60,11 +62,17 @@ describe("MessageBubble", () => {
 
   it("clicking again while speaking stops it instead", async () => {
     const stop = vi.fn();
-    mockSynthesis({ isSpeaking: true, stop });
+    mockVoiceOutput({ isSpeaking: true, stop });
     const user = userEvent.setup();
     render(<MessageBubble role="assistant" content="Hello there" />);
 
     await user.click(screen.getByRole("button", { name: /stop reading aloud/i }));
     expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it("disables the button while a request for AI voice audio is in flight", () => {
+    mockVoiceOutput({ isLoading: true });
+    render(<MessageBubble role="assistant" content="Hello there" />);
+    expect(screen.getByRole("button", { name: /read message aloud/i })).toBeDisabled();
   });
 });

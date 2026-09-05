@@ -7,18 +7,15 @@ import type { ChatMessageRead } from "../api/types";
 import { ChatComposer } from "../components/chat/ChatComposer";
 import { MessageBubble } from "../components/chat/MessageBubble";
 import { SessionSidebar } from "../components/chat/SessionSidebar";
-import { useSpeechSynthesis } from "../hooks/useSpeechSynthesis";
+import { useVoiceConversation } from "../hooks/useVoiceConversation";
+import { useVoiceOutput } from "../hooks/useVoiceOutput";
+import { useVoicePreferences } from "../hooks/useVoicePreferences";
 
-const AUTO_SPEAK_STORAGE_KEY = "rag-chatbot:auto-speak-replies";
-
-function loadAutoSpeakPreference(): boolean {
-  try {
-    return localStorage.getItem(AUTO_SPEAK_STORAGE_KEY) === "true";
-  } catch {
-    // Private browsing / storage blocked — default to off rather than throw.
-    return false;
-  }
-}
+const PHASE_LABEL: Record<string, string> = {
+  listening: "🎙️ Listening…",
+  thinking: "🤔 Thinking…",
+  speaking: "🔊 Speaking…",
+};
 
 export function ChatPage() {
   const queryClient = useQueryClient();
@@ -26,18 +23,17 @@ export function ChatPage() {
   const [pendingUserMessage, setPendingUserMessage] = useState<string | null>(null);
   const [streamingAssistant, setStreamingAssistant] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
-  const [autoSpeak, setAutoSpeak] = useState(loadAutoSpeakPreference);
   const abortControllerRef = useRef<AbortController | null>(null);
   const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
-  const { isSupported: ttsSupported, speak } = useSpeechSynthesis();
+  const { autoSpeak } = useVoicePreferences();
+  const { speak } = useVoiceOutput();
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(AUTO_SPEAK_STORAGE_KEY, String(autoSpeak));
-    } catch {
-      // Ignore — this is a convenience preference, not critical state.
-    }
-  }, [autoSpeak]);
+  // handleSend is defined after this (it needs voiceConversation.active/
+  // handleAssistantReply), but useVoiceConversation needs a callback that
+  // calls handleSend — a ref breaks the circularity without restarting
+  // recognition every render the way passing a fresh inline closure would.
+  const handleSendRef = useRef<(message: string) => void>(() => {});
+  const voiceConversation = useVoiceConversation((transcript) => handleSendRef.current(transcript));
 
   const sessionsQuery = useQuery({ queryKey: ["chat", "sessions"], queryFn: listSessions });
 
@@ -111,13 +107,19 @@ export function ChatPage() {
           // the next message is sent.
           if (!failed) {
             setStreamingAssistant(null);
-            if (autoSpeak) speak(fullResponse);
+            if (voiceConversation.active) {
+              // Speaks the reply, then resumes listening for the next turn.
+              void voiceConversation.handleAssistantReply(fullResponse);
+            } else if (autoSpeak) {
+              void speak(fullResponse);
+            }
           }
         },
       },
       controller.signal,
     );
   };
+  handleSendRef.current = handleSend;
 
   const persistedMessages: ChatMessageRead[] = messagesQuery.data ?? [];
   const showEmptyState =
@@ -130,6 +132,7 @@ export function ChatPage() {
         selectedSessionId={selectedSessionId}
         onSelect={(id) => {
           abortControllerRef.current?.abort();
+          voiceConversation.stop();
           setSelectedSessionId(id);
           setPendingUserMessage(null);
           setStreamingAssistant(null);
@@ -139,16 +142,25 @@ export function ChatPage() {
       />
 
       <div className="flex flex-1 flex-col">
-        {ttsSupported && (
-          <div className="flex justify-end border-b border-slate-100 px-6 py-2">
-            <label className="flex items-center gap-1.5 text-xs text-slate-500">
-              <input
-                type="checkbox"
-                checked={autoSpeak}
-                onChange={(e) => setAutoSpeak(e.target.checked)}
-              />
-              🔊 Read replies aloud
-            </label>
+        {voiceConversation.isSupported && (
+          <div className="flex items-center justify-between border-b border-slate-100 px-6 py-2">
+            <span className="text-xs text-slate-500">
+              {voiceConversation.active && PHASE_LABEL[voiceConversation.phase]}
+              {voiceConversation.error && (
+                <span className="text-red-600">Voice conversation error: {voiceConversation.error}</span>
+              )}
+            </span>
+            <button
+              type="button"
+              onClick={() => (voiceConversation.active ? voiceConversation.stop() : voiceConversation.start())}
+              className={`rounded-md border px-3 py-1.5 text-xs font-medium ${
+                voiceConversation.active
+                  ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
+                  : "border-slate-300 text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              {voiceConversation.active ? "⏹️ Stop voice conversation" : "🎙️ Start voice conversation"}
+            </button>
           </div>
         )}
         <div className="flex-1 overflow-y-auto p-6">
@@ -172,7 +184,7 @@ export function ChatPage() {
           )}
         </div>
         <div className="mx-auto w-full max-w-3xl">
-          <ChatComposer disabled={isSending} onSend={handleSend} />
+          <ChatComposer disabled={isSending || voiceConversation.active} onSend={handleSend} />
         </div>
       </div>
     </div>

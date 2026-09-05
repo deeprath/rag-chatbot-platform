@@ -192,3 +192,38 @@ async def test_check_ollama_available_false_when_unreachable(
 
     monkeypatch.setattr(httpx, "AsyncClient", FakeAsyncClient)
     assert await llm_provider.check_ollama_available(_settings()) is False
+
+
+# --- resolve_groq_api_key: independent of the user's *chat* provider choice ---
+
+
+async def test_resolve_groq_api_key_prefers_users_saved_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings_with_key = _settings(secret_encryption_key=Fernet.generate_key().decode())
+    ciphertext = encrypt_secret("gsk-users-own-voice-key", settings_with_key)
+
+    async def fake_get_settings(_db: object, _owner_id: str) -> UserLLMSettings | None:
+        # Chatting via Anthropic, but still has their own Groq key saved.
+        return _FakeRow(provider="anthropic", encrypted_groq_key=ciphertext)  # type: ignore[return-value]
+
+    monkeypatch.setattr(llm_settings_repository, "get_settings", fake_get_settings)
+    monkeypatch.setattr(llm_provider, "get_settings", lambda: settings_with_key)
+
+    key = await llm_provider.resolve_groq_api_key(db=None, owner_id="user-1")  # type: ignore[arg-type]
+    assert key == "gsk-users-own-voice-key"
+
+
+async def test_resolve_groq_api_key_falls_back_to_deployment_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_get_settings(_db: object, _owner_id: str) -> UserLLMSettings | None:
+        return None
+
+    monkeypatch.setattr(llm_settings_repository, "get_settings", fake_get_settings)
+    monkeypatch.setattr(
+        llm_provider, "get_settings", lambda: _settings(groq_api_key="gsk-deployment-key")
+    )
+
+    key = await llm_provider.resolve_groq_api_key(db=None, owner_id="user-1")  # type: ignore[arg-type]
+    assert key == "gsk-deployment-key"

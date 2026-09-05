@@ -4,12 +4,17 @@ import { useCallback, useEffect, useState } from "react";
  * Wraps the browser's native speechSynthesis (text-to-speech) — widely
  * supported (unlike SpeechRecognition), no network call, no API key.
  * Deliberately entirely client-side per the user's choice: message text
- * never leaves the browser just to be read aloud.
+ * never leaves the browser just to be read aloud. Used as the always-
+ * available fallback/base layer under useVoiceOutput, which layers Groq's
+ * AI voice (useAiVoice) on top for English.
  */
 export interface UseSpeechSynthesisResult {
   isSupported: boolean;
   isSpeaking: boolean;
-  speak: (text: string) => void;
+  /** Resolves once playback actually finishes (or rejects on error) — lets
+   * a caller await "is this utterance done" for turn-taking (see
+   * useVoiceConversation), not just fire-and-forget. */
+  speak: (text: string, lang?: string) => Promise<void>;
   stop: () => void;
 }
 
@@ -18,17 +23,26 @@ export function useSpeechSynthesis(): UseSpeechSynthesisResult {
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   const speak = useCallback(
-    (text: string) => {
-      if (!isSupported || !text.trim()) return;
+    (text: string, lang?: string): Promise<void> => {
+      if (!isSupported || !text.trim()) return Promise.resolve();
       // Cancel whatever's already playing — otherwise utterances queue up
       // and read out back-to-back, which is never what "read this aloud" means.
       window.speechSynthesis.cancel();
 
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => setIsSpeaking(false);
-      utterance.onerror = () => setIsSpeaking(false);
-      window.speechSynthesis.speak(utterance);
+      return new Promise((resolve, reject) => {
+        const utterance = new SpeechSynthesisUtterance(text);
+        if (lang) utterance.lang = lang;
+        utterance.onstart = () => setIsSpeaking(true);
+        utterance.onend = () => {
+          setIsSpeaking(false);
+          resolve();
+        };
+        utterance.onerror = (event) => {
+          setIsSpeaking(false);
+          reject(new Error(event.error));
+        };
+        window.speechSynthesis.speak(utterance);
+      });
     },
     [isSupported],
   );
