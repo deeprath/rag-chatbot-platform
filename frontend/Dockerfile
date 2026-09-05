@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
 
-# node:20-slim (Debian/glibc), not -alpine: npm's optional-dependency resolution
+# node:24-slim (Debian/glibc), not -alpine: npm's optional-dependency resolution
 # for Rollup's native binary breaks on musl (https://github.com/npm/cli/issues/4828)
 # when package-lock.json was generated on a non-Alpine host, which it was here.
-FROM node:20-slim AS builder
+FROM node:24-slim AS builder
 WORKDIR /app
 
 # package-lock.json deliberately isn't copied in here: npm/cli#4828 means a

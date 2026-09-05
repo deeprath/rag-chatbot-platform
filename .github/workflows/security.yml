@@ -116,15 +116,18 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
-      # npm install, not npm ci — see .github/workflows/ci.yml's identical
-      # comment (npm/cli#4828: a macOS-committed lockfile breaks npm ci's
-      # optional native-dep resolution on this Linux runner).
+      # Removes package-lock.json before installing — see
+      # .github/workflows/ci.yml's identical comment (npm/cli#4828: a
+      # macOS-committed lockfile locks in the wrong platform's optional
+      # native deps, and npm install alone still honors it while it's
+      # present; only removing it first forces a correct re-resolve).
       - name: Frontend coverage
         working-directory: frontend
         run: |
+          rm -f package-lock.json
           npm install
           npm run test:coverage
 

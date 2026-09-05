@@ -51,18 +51,22 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
-      # Deliberately `npm install`, not `npm ci`: npm/cli#4828 means a
-      # lockfile committed from one platform (ours: macOS) can make `npm ci`
-      # fail to resolve optional native deps (Rollup's platform binary) on a
-      # different platform (this Linux runner) — see frontend/Dockerfile's
-      # identical workaround/comment for the same underlying bug.
+      # Deliberately removes package-lock.json before installing: npm/cli#4828
+      # means a lockfile committed from one platform (ours: macOS) locks in
+      # that platform's optional native deps (Rollup's platform binary), and
+      # `npm install` with the lockfile still present still honors that
+      # resolution rather than re-resolving it for this Linux runner — only
+      # removing the lockfile first forces a fresh, platform-correct resolve.
+      # Reproduced and verified against a real linux/arm64 container (the
+      # failure/fix mechanism is platform-independent); see
+      # frontend/Dockerfile's identical workaround/comment for the same bug.
       - name: Install dependencies
         working-directory: frontend
-        run: npm install
+        run: rm -f package-lock.json && npm install
 
       - name: eslint
         working-directory: frontend

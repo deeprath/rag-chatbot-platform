@@ -19,7 +19,7 @@ torch pin).
 ## Prerequisites
 
 - Docker Desktop (or another Docker Engine + Compose v2)
-- For per-service dev (below, optional): `uv` (Python), Node 20
+- For per-service dev (below, optional): `uv` (Python), Node 24
 
 ## Working on one piece at a time
 
