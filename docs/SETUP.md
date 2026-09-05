@@ -81,6 +81,6 @@ autogenerate` will misread its Timescale-managed index as drift unless
 | Symptom | Likely cause |
 |---|---|
 | Every authenticated request fails with "issuer mismatch" | `KEYCLOAK_SERVER_URL`/`KEYCLOAK_ISSUER_URL` (backend) or `KC_HOSTNAME` (Keycloak) don't match how the browser reaches Keycloak — see `infra/README.md` |
-| `POST /api/v1/chat` hangs or 500s | No `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` set for the active `LLM_PROVIDER` — check `backend/.env` or `infra/.env` |
+| `POST /api/v1/chat` hangs or 500s | No `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` set for the active `LLM_PROVIDER` — check `backend/.env` or `infra/.env`, or switch to `LLM_PROVIDER=ollama` (no key needed, see `infra/README.md`) |
 | Document stuck in `processing` | Check backend logs — the embedding model downloads on first use and needs outbound network access the first time |
 | `docker compose build frontend` fails on `npm ci` | Known npm/Rollup bug (npm/cli#4828) if you edited the Dockerfile back to `npm ci` with the checked-in lockfile — see `frontend/Dockerfile`'s comment |

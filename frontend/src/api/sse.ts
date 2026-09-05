@@ -51,22 +51,53 @@ export async function streamChat(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  // Set once an "error" or "done" SSE frame is actually parsed — lets the code
+  // below tell "the stream ended because the server said so" apart from "the
+  // stream ended/broke for some other reason" (e.g. a proxy or network layer
+  // closing the connection mid-response: observed in practice as the browser
+  // throwing on `reader.read()`, or the loop reaching `done: true` with no
+  // terminal frame ever having arrived). Without this, either case left the
+  // UI's "assistant is typing" indicator spinning forever — neither `onDone`
+  // nor `onError` was ever called, so nothing ever cleared `isSending`.
+  let terminated = false;
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+  function handleFrame(rawEvent: string): void {
+    const eventType = parseEvent(rawEvent, callbacks);
+    if (eventType === "done" || eventType === "error") terminated = true;
+  }
 
-    let separatorIndex = buffer.indexOf("\n\n");
-    while (separatorIndex !== -1) {
-      handleEvent(buffer.slice(0, separatorIndex), callbacks);
-      buffer = buffer.slice(separatorIndex + 2);
-      separatorIndex = buffer.indexOf("\n\n");
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let separatorIndex = buffer.indexOf("\n\n");
+      while (separatorIndex !== -1) {
+        handleFrame(buffer.slice(0, separatorIndex));
+        buffer = buffer.slice(separatorIndex + 2);
+        separatorIndex = buffer.indexOf("\n\n");
+      }
     }
+  } catch (err) {
+    if ((err as Error).name === "AbortError") return; // caller already reset its own state
+    if (!terminated) {
+      callbacks.onError?.("Connection to the server was interrupted before the response finished.");
+      callbacks.onDone?.();
+    }
+    return;
+  }
+
+  if (!terminated) {
+    callbacks.onError?.("The response ended unexpectedly. Please try again.");
+    callbacks.onDone?.();
   }
 }
 
-function handleEvent(rawEvent: string, callbacks: StreamChatCallbacks): void {
+/** Parses one "event: X\ndata: Y" frame, invokes the matching callback, and
+ * returns the event type so the caller can track whether a terminal frame
+ * ("done"/"error") was actually seen. */
+function parseEvent(rawEvent: string, callbacks: StreamChatCallbacks): string {
   let eventType = "message";
   let dataLine = "";
   for (const line of rawEvent.split("\n")) {
@@ -85,4 +116,6 @@ function handleEvent(rawEvent: string, callbacks: StreamChatCallbacks): void {
   else if (eventType === "token") callbacks.onToken?.(data);
   else if (eventType === "error") callbacks.onError?.(data);
   else if (eventType === "done") callbacks.onDone?.();
+
+  return eventType;
 }

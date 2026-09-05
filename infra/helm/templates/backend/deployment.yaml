@@ -91,6 +91,11 @@ spec:
                 secretKeyRef:
                   name: {{ include "rag-chatbot.componentFullname" (list $ "secrets") }}
                   key: openai-api-key
+            - name: SECRET_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rag-chatbot.componentFullname" (list $ "secrets") }}
+                  key: secret-encryption-key
             - name: CORS_ALLOW_ORIGINS
               value: {{ .Values.backend.env.corsAllowOrigins | quote }}
           readinessProbe:

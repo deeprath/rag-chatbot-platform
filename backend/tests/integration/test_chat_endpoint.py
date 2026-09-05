@@ -46,10 +46,11 @@ async def client(
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_session_maker] = lambda: session_maker
-    monkeypatch.setattr(
-        "app.services.chat_service.get_chat_model",
-        lambda: FakeListChatModel(responses=[FAKE_REPLY]),
-    )
+
+    async def fake_resolve_chat_model(_db: object, _owner_id: str) -> BaseChatModel:
+        return FakeListChatModel(responses=[FAKE_REPLY])
+
+    monkeypatch.setattr("app.services.chat_service.resolve_chat_model", fake_resolve_chat_model)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -120,8 +121,11 @@ async def test_second_turn_reuses_session_and_sees_history(
 async def test_llm_failure_surfaces_as_sse_error_not_a_hang(
     client: AsyncClient, auth_headers, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Overrides the client fixture's own get_chat_model patch, for this test only.
-    monkeypatch.setattr("app.services.chat_service.get_chat_model", lambda: _RaisingChatModel())
+    # Overrides the client fixture's own resolve_chat_model patch, for this test only.
+    async def fake_resolve_chat_model(_db: object, _owner_id: str) -> BaseChatModel:
+        return _RaisingChatModel()
+
+    monkeypatch.setattr("app.services.chat_service.resolve_chat_model", fake_resolve_chat_model)
     headers = auth_headers("chat-test-user-3")
 
     response = await client.post(

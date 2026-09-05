@@ -11,7 +11,7 @@ flowchart LR
   API -- verify JWT via JWKS --> KC
   API --> PG[(TimescaleDB<br/>+ pgvector)]
   API --> MinIO[(MinIO<br/>object storage)]
-  API --> LLM{{Anthropic / OpenAI}}
+  API --> LLM{{Anthropic / OpenAI / Ollama}}
   API -- embed --> Embed[Local HF embedding model]
 
   subgraph Security[Security tooling]
@@ -31,7 +31,7 @@ flowchart LR
 | Database | TimescaleDB (Postgres) + pgvector | Chat history (hypertable) + document embeddings, one engine |
 | Object storage | MinIO | Raw uploaded documents |
 | Embeddings | Local HuggingFace model (`BAAI/bge-small-en-v1.5`) | Provider-agnostic, no external API dependency |
-| LLM | Anthropic Claude or OpenAI (configurable) | Chat completion |
+| LLM | Anthropic Claude, OpenAI, or local Ollama (configurable, `LLM_PROVIDER`) | Chat completion |
 
 ## Why these choices
 
@@ -130,6 +130,13 @@ sequenceDiagram
   `session_id` FK, `role`, `content`, `created_at`, `token_count`.
   Composite `(id, created_at)` primary key — TimescaleDB requires the
   partitioning column in every unique constraint on a hypertable.
+- **`user_llm_settings`**: `owner_id` (PK, Keycloak `sub`), `provider`,
+  `encrypted_anthropic_key`/`encrypted_openai_key` (Fernet ciphertext, never
+  plaintext — see docs/SECURITY.md), `anthropic_key_preview`/
+  `openai_key_preview` (masked display strings, computed once at write time
+  so a GET never needs to decrypt anything), `updated_at`. One row per user
+  who has configured their own provider via the Settings page; a user with no
+  row falls back to the deployment-wide `LLM_PROVIDER` env default.
 
 ## Repository layout
 

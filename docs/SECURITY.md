@@ -109,6 +109,48 @@ Tailwind/React's inline styles) — everything else is purely informational
 (ZAP noting it detected an SPA, cache-control observations) or noise inherent
 to any bundled JS file (numbers that incidentally look like Unix timestamps).
 
+## Per-user API key encryption
+
+Each user can pick their own LLM provider and paste in their own API key from
+the frontend's Settings page ([`frontend/src/pages/SettingsPage.tsx`](../frontend/src/pages/SettingsPage.tsx))
+instead of the whole deployment sharing one `LLM_PROVIDER`/key from `.env`.
+That key is sensitive user data, so it gets the same "actually verify it,
+don't just configure it" treatment as everything else here:
+
+- **Encrypted before it ever reaches the database.** [`app/core/crypto.py`](../backend/app/core/crypto.py)
+  uses Fernet (AES-128-CBC + HMAC, from `cryptography` — already a transitive
+  dependency via `python-jose[cryptography]`, no new heavy dependency added)
+  keyed by `SECRET_ENCRYPTION_KEY`, an app-level secret separate from any
+  user's own key. [`test_crypto.py`](../backend/tests/unit/test_crypto.py)
+  proves the stored ciphertext contains neither the plaintext nor a trivial
+  encoding of it, and that a different key can't decrypt it.
+- **Never decrypted to answer a GET.** The API (`GET /api/v1/settings/llm`)
+  returns only a masked preview (`sk-ant-…a1b2`) computed once, at write time,
+  from the plaintext the request already had in hand — stored in its own
+  column, separate from the ciphertext — so displaying "a key is saved" never
+  requires decrypting the real value again. The real key is decrypted in
+  exactly one place, [`resolve_chat_model()`](../backend/app/services/llm_provider.py),
+  transiently, immediately before it's handed to the provider's own SDK client
+  for an actual chat call — never logged, never cached, never returned to the
+  frontend. [`test_llm_settings_endpoint.py`](../backend/tests/integration/test_llm_settings_endpoint.py)
+  asserts the plaintext appears in neither the HTTP response body nor the
+  database row, end-to-end against a real (migrated) Postgres.
+- **Scoped and authenticated like everything else.** The settings endpoints
+  sit behind the same `get_current_owner_id` JWT dependency as documents/chat
+  — one user can never see or overwrite another's key (verified by
+  `test_settings_are_scoped_to_owner`).
+- **Frontend hygiene**: the key `<input>` is `type="password"` with
+  `autoComplete="new-password"` (discourages a password manager from
+  offering to autofill it from an unrelated saved credential), is never
+  pre-filled with a real value, and is cleared from component state
+  immediately after a successful save.
+- **Switching providers doesn't demand re-entering a key.** Anthropic and
+  OpenAI keys are stored in separate columns; toggling `provider` back and
+  forth reuses whichever key was last saved for that provider rather than
+  silently discarding it — but a key is required the *first* time a
+  key-based provider is selected (`422` otherwise), and `clear_api_key`
+  removes one explicitly.
+
 ## SonarQube
 
 [`sonar-project.properties`](../sonar-project.properties) covers both the

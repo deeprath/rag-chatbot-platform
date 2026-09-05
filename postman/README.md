@@ -1,10 +1,10 @@
 # Postman collection
 
 `rag-chatbot.postman_collection.json` + `rag-chatbot.postman_environment.json`,
-built from the real OpenAPI spec (`backend/app/main.py`'s 7 live endpoints)
-and **verified end-to-end against the actual docker-compose stack** via
-`newman` — 9/9 requests, 5/5 assertions, 0 failures (login → upload → list/get
-document → chat → sessions → messages).
+built from the real OpenAPI spec (`backend/app/main.py`'s live endpoints) and
+**verified end-to-end against the actual docker-compose stack** via `newman`
+(login → upload → list/get document → chat → sessions → messages → LLM
+settings — every folder run for real, not just configured).
 
 ## Use it
 
@@ -16,10 +16,17 @@ document → chat → sessions → messages).
 4. **Documents > Upload Document** needs a file attached to the `file` form
    field (Postman won't let you send it otherwise). Sets `{{document_id}}`.
 5. **Chat > Send Message** sets `{{session_id}}` from the SSE response. Needs
-   `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` set in `infra/.env` to get a real
-   reply — without one you'll see `event: error`, which is expected (every
-   other part of the flow — auth, persistence — still works, see the
-   request's own description).
+   an LLM actually configured to get a real reply — either `LLM_PROVIDER=ollama`
+   (no key needed, see [`../infra/README.md`](../infra/README.md)) or a real
+   `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`. Without either you'll see
+   `event: error`, which is expected (every other part of the flow — auth,
+   persistence — still works, see the request's own description). A cold
+   Ollama model load can also make this request noticeably slower than the
+   others — that's normal, not a hang.
+6. **Settings** manages per-user LLM provider/API key — `Get LLM Settings`
+   and `Set Provider: Ollama` need no setup; `Set Provider: Anthropic` needs
+   `anthropic_api_key` set in this collection's variables first (only
+   required the *first* time you select that provider — `422` otherwise).
 
 Postman buffers SSE responses into one body rather than rendering tokens live
 — that's a Postman UI limitation, not a bug in the API.

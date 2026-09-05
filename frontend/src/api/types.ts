@@ -23,3 +23,21 @@ export interface ChatMessageRead {
   content: string;
   created_at: string;
 }
+
+export type LLMProvider = "anthropic" | "openai" | "ollama";
+
+export interface LLMSettingsRead {
+  provider: LLMProvider;
+  has_anthropic_key: boolean;
+  has_openai_key: boolean;
+  anthropic_key_preview: string | null;
+  openai_key_preview: string | null;
+}
+
+export interface LLMSettingsUpdate {
+  provider: LLMProvider;
+  // Only send when actually setting/replacing a key — omitting it (not
+  // sending an empty string) keeps whatever was already saved server-side.
+  api_key?: string;
+  clear_api_key?: boolean;
+}

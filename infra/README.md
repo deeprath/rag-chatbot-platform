@@ -24,6 +24,29 @@ Migrations run automatically: `backend-migrate` is a one-shot service (`alembic
 upgrade head`) that the `backend` service waits on (`service_completed_successfully`)
 before starting.
 
+## Using Ollama (no API key needed)
+
+Don't have an `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` yet? `LLM_PROVIDER=ollama` runs
+a local open model instead — no key, no cost, works offline. The `ollama` service
+is behind a compose **profile** so it doesn't force a ~1GB+ model download on
+everyone who just wants to use a real API key:
+
+```bash
+cd infra
+# in .env: LLM_PROVIDER=ollama   (OLLAMA_MODEL defaults to llama3.2:1b)
+docker compose --profile ollama up -d --build
+docker compose --profile ollama run --rm ollama-pull   # first time only — pulls the model
+```
+
+Responses are slower and lower-quality than Claude/GPT (small model, CPU-only —
+Docker Desktop doesn't pass through Apple Silicon/GPU acceleration), but it's a
+real, working LLM with no signup. Swap `OLLAMA_MODEL` for a bigger model
+(`llama3.2:3b`, `qwen2.5:7b`, ...) if your machine can take it — just re-run the
+`ollama-pull` command above after changing it. Switch back to a real provider
+any time by setting `LLM_PROVIDER=anthropic` (or `openai`) and restarting the
+`backend` service; the `ollama` containers can keep running idle or be stopped
+with `docker compose --profile ollama down`.
+
 ## Things worth knowing if you touch this
 
 - **Keycloak issuer vs. internal address**: the backend reaches Keycloak internally

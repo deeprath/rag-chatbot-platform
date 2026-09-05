@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "RAG Chatbot Platform",
-    "description": "FastAPI + LangChain RAG chatbot API. Built from the real OpenAPI spec (backend/app/main.py) against the 7 live endpoints — see docs/ARCHITECTURE.md for the full request flows.\n\nRun order: **Auth > Get Token** first (sets {{access_token}} for everything else), then anything else in any order. **Documents > Upload Document** sets {{document_id}}; **Chat > Send Message** sets {{session_id}}.\n\nAgainst docker-compose (default variable values): everything routes through Kong at http://localhost:8000/api/v1. Against the Helm chart, override `base_url`/`keycloak_url` to your Ingress hosts (see infra/helm/README.md).",
+    "description": "FastAPI + LangChain RAG chatbot API. Built from the real OpenAPI spec (backend/app/main.py) against the live endpoints — see docs/ARCHITECTURE.md for the full request flows.\n\nRun order: **Auth > Get Token** first (sets {{access_token}} for everything else), then anything else in any order. **Documents > Upload Document** sets {{document_id}}; **Chat > Send Message** sets {{session_id}}; **Settings** requests need no setup unless you're testing Anthropic/OpenAI, in which case set `anthropic_api_key` in this collection's variables first.\n\nAgainst docker-compose (default variable values): everything routes through Kong at http://localhost:8000/api/v1. Against the Helm chart, override `base_url`/`keycloak_url` to your Ingress hosts (see infra/helm/README.md).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -13,7 +13,8 @@
     { "key": "password", "value": "testuser123" },
     { "key": "access_token", "value": "" },
     { "key": "document_id", "value": "" },
-    { "key": "session_id", "value": "" }
+    { "key": "session_id", "value": "" },
+    { "key": "anthropic_api_key", "value": "" }
   ],
   "auth": {
     "type": "bearer",
@@ -183,6 +184,72 @@
               "raw": "{{base_url}}/chat/sessions/{{session_id}}/messages",
               "host": ["{{base_url}}"],
               "path": ["chat", "sessions", "{{session_id}}", "messages"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Settings",
+      "item": [
+        {
+          "name": "Get LLM Settings",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/settings/llm",
+              "host": ["{{base_url}}"],
+              "path": ["settings", "llm"]
+            },
+            "description": "Current provider + whether a key is saved. Never returns a real key — only a masked preview like `sk-ant-…a1b2` (see docs/SECURITY.md)."
+          }
+        },
+        {
+          "name": "Set Provider: Ollama (no key needed)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"ollama\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/settings/llm",
+              "host": ["{{base_url}}"],
+              "path": ["settings", "llm"]
+            }
+          }
+        },
+        {
+          "name": "Set Provider: Anthropic (with API key)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"anthropic\",\n  \"api_key\": \"{{anthropic_api_key}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/settings/llm",
+              "host": ["{{base_url}}"],
+              "path": ["settings", "llm"]
+            },
+            "description": "Set `anthropic_api_key` in this collection's variables first. Only required the *first* time you select this provider — switching away and back later reuses the saved key without resending it. `422` if you omit it with no key already saved."
+          }
+        },
+        {
+          "name": "Clear Anthropic Key",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"anthropic\",\n  \"clear_api_key\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/settings/llm",
+              "host": ["{{base_url}}"],
+              "path": ["settings", "llm"]
             }
           }
         }

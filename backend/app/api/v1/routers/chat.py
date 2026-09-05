@@ -14,6 +14,7 @@ from app.db.session import get_db, get_session_maker
 from app.repositories import chat_repository
 from app.schemas.chat import ChatMessageRead, ChatRequest, ChatSessionRead
 from app.services.chat_service import get_or_create_session, run_chat_turn
+from app.services.llm_provider import LLMConfigurationError
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 logger = get_logger(__name__)
@@ -39,6 +40,11 @@ async def chat(
             try:
                 async for token in run_chat_turn(db, owner_id, session, request.message):
                     yield _sse_event("token", token)
+            except LLMConfigurationError as exc:
+                # Message is safe to show as-is: it names a missing/misconfigured
+                # provider setting, never a secret (see app/services/llm_provider.py).
+                logger.warning("chat_stream_llm_not_configured", error=str(exc))
+                yield _sse_event("error", str(exc))
             except Exception as exc:  # noqa: BLE001 - surface failure as an SSE event too
                 logger.error("chat_stream_failed", error=str(exc))
                 yield _sse_event("error", "The assistant failed to generate a response.")

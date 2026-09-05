@@ -54,12 +54,21 @@ class Settings(BaseSettings):
     keycloak_issuer_url: str | None = None
 
     # --- LLM provider ---
-    llm_provider: Literal["anthropic", "openai"] = "anthropic"
+    llm_provider: Literal["anthropic", "openai", "ollama"] = "anthropic"
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-5"
     openai_api_key: str | None = None
     openai_model: str = "gpt-4o-mini"
+    # Ollama needs no API key — a local/self-hosted model server, useful as a
+    # free stand-in while ANTHROPIC_API_KEY/OPENAI_API_KEY aren't set up yet.
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "llama3.2:1b"
     llm_temperature: float = 0.2
+    # Fernet key (32 url-safe base64 bytes) encrypting per-user API keys at rest —
+    # see app/core/crypto.py. Required only once a user saves an API key via the
+    # Settings UI; generate with:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    secret_encryption_key: str | None = None
 
     # --- Embeddings (local, provider-agnostic) ---
     embedding_model_name: str = "BAAI/bge-small-en-v1.5"

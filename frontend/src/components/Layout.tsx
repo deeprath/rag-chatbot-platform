@@ -22,6 +22,9 @@ export function Layout() {
             <NavLink to="/documents" className={navLinkClass}>
               Documents
             </NavLink>
+            <NavLink to="/settings" className={navLinkClass}>
+              Settings
+            </NavLink>
           </nav>
         </div>
         <div className="flex items-center gap-4 text-sm text-slate-600">

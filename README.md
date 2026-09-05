@@ -68,7 +68,7 @@ npm run dev                      # http://localhost:5173
 | Layer | Choice |
 |---|---|
 | Backend | FastAPI, Python 3.12, LangChain (LCEL), `uv` |
-| LLM | Anthropic Claude or OpenAI (configurable via `LLM_PROVIDER`) |
+| LLM | Anthropic Claude, OpenAI, or local Ollama — no API key needed (configurable via `LLM_PROVIDER`) |
 | Embeddings | Local HuggingFace model (`BAAI/bge-small-en-v1.5`), no external API needed |
 | Database | TimescaleDB (Postgres + Timescale) with `pgvector` for embeddings |
 | Object storage | MinIO |

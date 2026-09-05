@@ -4,6 +4,7 @@ import { useAuth } from "./auth/AuthProvider";
 import { Layout } from "./components/Layout";
 import { ChatPage } from "./pages/ChatPage";
 import { DocumentsPage } from "./pages/DocumentsPage";
+import { SettingsPage } from "./pages/SettingsPage";
 
 function LoginGate({ children }: { children: React.ReactNode }) {
   const { authenticated, initializing, login } = useAuth();
@@ -42,6 +43,7 @@ function App() {
           <Route index element={<Navigate to="/chat" replace />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/documents" element={<DocumentsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Routes>
     </LoginGate>

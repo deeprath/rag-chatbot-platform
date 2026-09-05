@@ -14,7 +14,7 @@ from app.langchain_pipeline.rag_chain import format_context, stream_answer
 from app.models.chat import ChatSession, MessageRole
 from app.repositories import chat_repository, document_repository
 from app.services.embedding_service import embed_query
-from app.services.llm_provider import get_chat_model
+from app.services.llm_provider import resolve_chat_model
 
 # How many prior turns (user+assistant messages) to feed back in as history.
 HISTORY_MESSAGE_LIMIT = 20
@@ -58,7 +58,7 @@ async def run_chat_turn(
     )
     context = format_context([chunk.chunk_text for chunk in chunks])
 
-    chat_model = get_chat_model()
+    chat_model = await resolve_chat_model(db, owner_id)
     full_response = ""
     async for token in stream_answer(
         chat_model, {"context": context, "history": history, "question": question}
