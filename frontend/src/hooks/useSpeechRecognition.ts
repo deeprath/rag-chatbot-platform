@@ -23,6 +23,12 @@ const IGNORED_ERRORS = new Set(["no-speech", "aborted"]);
 
 export function useSpeechRecognition(
   onResult: (transcript: string) => void,
+  /** BCP-47 tag (e.g. "hi-IN") to recognize in — defaults to the browser's
+   * own language if omitted. Without this, recognition always listened in
+   * whatever `navigator.language` was, ignoring the user's Hindi/English
+   * choice on the Settings page — a real cause of "it didn't understand me"
+   * for anyone whose browser language didn't match what they were speaking. */
+  lang?: string,
 ): UseSpeechRecognitionResult {
   const RecognitionCtor =
     typeof window !== "undefined" ? (window.SpeechRecognition ?? window.webkitSpeechRecognition) : undefined;
@@ -43,7 +49,7 @@ export function useSpeechRecognition(
     const recognition = new RecognitionCtor();
     recognition.continuous = false;
     recognition.interimResults = false;
-    recognition.lang = navigator.language || "en-US";
+    recognition.lang = lang || navigator.language || "en-US";
 
     recognition.onresult = (event) => {
       const last = event.results[event.results.length - 1];
@@ -59,7 +65,7 @@ export function useSpeechRecognition(
     recognitionRef.current = recognition;
     recognition.start();
     setIsListening(true);
-  }, [RecognitionCtor, isListening]);
+  }, [RecognitionCtor, isListening, lang]);
 
   const stop = useCallback(() => {
     recognitionRef.current?.stop();

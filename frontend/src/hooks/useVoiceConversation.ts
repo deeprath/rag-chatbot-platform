@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useSpeechRecognition } from "./useSpeechRecognition";
 import { useVoiceOutput } from "./useVoiceOutput";
+import { BROWSER_LANG_TAG, useVoicePreferences } from "./useVoicePreferences";
 
 export type ConversationPhase = "idle" | "listening" | "thinking" | "speaking";
 
@@ -10,6 +11,9 @@ export interface UseVoiceConversationResult {
   active: boolean;
   phase: ConversationPhase;
   error: string | null;
+  /** The last thing recognized from the mic, for a "you said..." caption —
+   * cleared at the start of every new turn. */
+  lastTranscript: string | null;
   start: () => void;
   stop: () => void;
   /** Call once the assistant's reply for the current turn has fully arrived —
@@ -26,37 +30,65 @@ export interface UseVoiceConversationResult {
  * (useSpeechRecognition, useVoiceOutput) — this hook is just the turn-taking
  * state machine wiring them together; ChatPage still owns actually sending
  * the message and knowing when a reply has fully arrived.
+ *
+ * Supports barge-in: the mic stays live during "speaking" too (not just
+ * "listening"), so talking over the assistant's reply cuts it off and starts
+ * the next turn immediately, like a real conversation — only "thinking" (a
+ * turn is already in flight) and "idle" turn the mic off.
  */
 export function useVoiceConversation(
   onUserMessage: (transcript: string) => void,
 ): UseVoiceConversationResult {
   const [active, setActive] = useState(false);
   const [phase, setPhase] = useState<ConversationPhase>("idle");
+  const [lastTranscript, setLastTranscript] = useState<string | null>(null);
   // Effects/callbacks below need the *current* value without re-subscribing
   // every time it changes (that would restart recognition mid-utterance).
   const activeRef = useRef(active);
   activeRef.current = active;
+  // Mirrors `phase`, but — unlike a ref merely synced at the top of the
+  // render body — is written synchronously by setPhaseNow() below at the
+  // exact moment a transition is decided, not whenever React next gets
+  // around to re-rendering. handleAssistantReply reads it right after
+  // `await`ing voiceOutput.speak(): if that promise settles in the same
+  // microtask turn (it can, e.g. when AI voice fails instantly), React may
+  // not have re-rendered yet, so a ref that only updates on render would
+  // still read the *previous* phase and wrongly think no barge-in happened.
   const phaseRef = useRef(phase);
-  phaseRef.current = phase;
+  const setPhaseNow = useCallback((next: ConversationPhase) => {
+    phaseRef.current = next;
+    setPhase(next);
+  }, []);
 
+  const { language } = useVoicePreferences();
   const voiceOutput = useVoiceOutput();
+  const voiceOutputRef = useRef(voiceOutput);
+  voiceOutputRef.current = voiceOutput;
+
   const recognition = useSpeechRecognition((transcript) => {
     if (!transcript) return; // nothing understood — the effect below restarts listening
-    setPhase("thinking");
+    if (phaseRef.current === "thinking") return; // a turn is already in flight — ignore stray speech
+    if (phaseRef.current === "speaking") {
+      // Barge-in: the user started talking over the assistant's reply — cut
+      // it off immediately rather than waiting for it to finish.
+      voiceOutputRef.current.stop();
+    }
+    setLastTranscript(transcript);
+    setPhaseNow("thinking");
     onUserMessage(transcript);
-  });
+  }, BROWSER_LANG_TAG[language]);
 
   // Browser SpeechRecognition stops itself after each utterance *or* after a
-  // silence timeout with nothing heard. Only the "nothing heard" case should
-  // auto-restart listening here — if a transcript actually came through,
-  // onResult above already advanced phase to "thinking" before this runs, so
-  // the isListening/"listening" check correctly tells the two cases apart.
+  // silence timeout with nothing heard. This restarts it whenever that
+  // happens and the mic should still be on — during "listening" (waiting for
+  // a turn to start) and "speaking" (so a barge-in can be heard); "thinking"
+  // (a turn already in flight) and "idle" deliberately leave it off.
   useEffect(() => {
-    if (!recognition.isListening && activeRef.current && phaseRef.current === "listening") {
+    if (!recognition.isListening && activeRef.current && phaseRef.current !== "thinking") {
       recognition.start();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only isListening should retrigger this
-  }, [recognition.isListening]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run on either signal; refs carry the rest
+  }, [recognition.isListening, phase]);
 
   // A real recognition error (mic permission denied, no mic at all, ...)
   // ends the conversation outright rather than retry-looping something that
@@ -64,39 +96,45 @@ export function useVoiceConversation(
   useEffect(() => {
     if (recognition.error && activeRef.current) {
       setActive(false);
-      setPhase("idle");
+      setPhaseNow("idle");
     }
-  }, [recognition.error]);
+  }, [recognition.error, setPhaseNow]);
 
   const start = useCallback(() => {
     setActive(true);
-    setPhase("listening");
+    setPhaseNow("listening");
+    setLastTranscript(null);
     recognition.start();
-  }, [recognition]);
+  }, [recognition, setPhaseNow]);
 
   const stop = useCallback(() => {
     setActive(false);
-    setPhase("idle");
+    setPhaseNow("idle");
     recognition.stop();
     voiceOutput.stop();
-  }, [recognition, voiceOutput]);
+  }, [recognition, voiceOutput, setPhaseNow]);
 
   const handleAssistantReply = useCallback(
     async (text: string) => {
       if (!activeRef.current) return;
-      setPhase("speaking");
+      setPhaseNow("speaking");
       try {
         await voiceOutput.speak(text);
       } catch {
         // Already surfaced via voiceOutput.aiVoiceError if it matters — the
         // conversation keeps going rather than stopping over a speech failure.
       }
-      if (activeRef.current) {
-        setPhase("listening");
-        recognition.start();
+      // Only fall back to "listening" if nothing has already moved the
+      // conversation on — a barge-in mid-reply advances phase to "thinking"
+      // itself (for the turn it just started), and this must not stomp on
+      // that once the interrupted speak() promise above settles. Reading
+      // phaseRef here (not the `phase` state variable) is what makes this
+      // check race-proof — see setPhaseNow's comment above.
+      if (activeRef.current && phaseRef.current === "speaking") {
+        setPhaseNow("listening");
       }
     },
-    [voiceOutput, recognition],
+    [voiceOutput, setPhaseNow],
   );
 
   return {
@@ -104,6 +142,7 @@ export function useVoiceConversation(
     active,
     phase,
     error: recognition.error,
+    lastTranscript,
     start,
     stop,
     handleAssistantReply,

@@ -81,4 +81,26 @@ describe("useAiVoice", () => {
     expect(lastAudio?.pause).toHaveBeenCalledOnce();
     expect(result.current.isSpeaking).toBe(false);
   });
+
+  it("stop() settles the in-flight speak() promise instead of hanging forever", async () => {
+    // Regression test: audio.pause() (what stop()'s cleanup does) never fires
+    // onended/onerror on its own, so a caller awaiting speak() — e.g. a
+    // barge-in interruption in useVoiceConversation — used to hang forever
+    // when stop() was called mid-playback.
+    synthesizeSpeech.mockResolvedValue(new Blob(["fake"], { type: "audio/wav" }));
+    const { result } = renderHook(() => useAiVoice());
+
+    let settled = false;
+    act(() => {
+      void result.current.speak("Hello there").then(() => {
+        settled = true;
+      });
+    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    act(() => lastAudio?.onplay?.());
+
+    act(() => result.current.stop());
+
+    await waitFor(() => expect(settled).toBe(true));
+  });
 });

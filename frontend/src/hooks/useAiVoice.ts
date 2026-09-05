@@ -26,9 +26,19 @@ export function useAiVoice(): UseAiVoiceResult {
   const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const urlRef = useRef<string | null>(null);
+  // Resolves whatever speak() call is currently in flight, cleared once it
+  // settles. audio.pause() (what cleanup() does) does NOT fire onended or
+  // onerror, so without this, calling stop() while an utterance is playing
+  // left the caller's `await speak(...)` hanging forever — a real bug that
+  // broke voice-conversation barge-in (interrupting the assistant mid-reply
+  // never let the turn-taking state machine move on to the next turn).
+  const resolvePendingRef = useRef<(() => void) | null>(null);
 
   const cleanup = useCallback(() => {
     if (audioRef.current) {
+      audioRef.current.onplay = null;
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
       audioRef.current.pause();
       audioRef.current.src = "";
       audioRef.current = null;
@@ -40,13 +50,17 @@ export function useAiVoice(): UseAiVoiceResult {
   }, []);
 
   const stop = useCallback(() => {
+    // An explicit stop is a normal, successful end from the caller's point
+    // of view (e.g. a barge-in interruption) — resolve, don't reject.
+    resolvePendingRef.current?.();
+    resolvePendingRef.current = null;
     cleanup();
     setIsSpeaking(false);
   }, [cleanup]);
 
   const speak = useCallback(
     async (text: string, voice?: AiVoice): Promise<void> => {
-      cleanup();
+      stop(); // cancel + settle any previous in-flight utterance first
       setError(null);
       setIsLoading(true);
       let blob: Blob;
@@ -66,13 +80,16 @@ export function useAiVoice(): UseAiVoiceResult {
       audioRef.current = audio;
 
       return new Promise((resolve, reject) => {
+        resolvePendingRef.current = resolve;
         audio.onplay = () => setIsSpeaking(true);
         audio.onended = () => {
+          resolvePendingRef.current = null;
           setIsSpeaking(false);
           cleanup();
           resolve();
         };
         audio.onerror = () => {
+          resolvePendingRef.current = null;
           setIsSpeaking(false);
           const message = "Playback failed.";
           setError(message);
@@ -80,6 +97,7 @@ export function useAiVoice(): UseAiVoiceResult {
           reject(new Error(message));
         };
         void audio.play().catch((err: unknown) => {
+          resolvePendingRef.current = null;
           setIsSpeaking(false);
           const message = err instanceof Error ? err.message : "Playback failed.";
           setError(message);
@@ -88,10 +106,10 @@ export function useAiVoice(): UseAiVoiceResult {
         });
       });
     },
-    [cleanup],
+    [cleanup, stop],
   );
 
-  useEffect(() => cleanup, [cleanup]);
+  useEffect(() => stop, [stop]);
 
   return { isLoading, isSpeaking, error, speak, stop };
 }

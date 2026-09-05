@@ -13,7 +13,7 @@ function mockVoiceOutput(overrides: Partial<ReturnType<typeof useVoiceOutput>> =
     isLoading: false,
     isSpeaking: false,
     aiVoiceError: null,
-    speak: vi.fn(),
+    speak: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn(),
     ...overrides,
   });
@@ -51,7 +51,7 @@ describe("MessageBubble", () => {
   });
 
   it("clicking the button speaks the message content", async () => {
-    const speak = vi.fn();
+    const speak = vi.fn().mockResolvedValue(undefined);
     mockVoiceOutput({ speak });
     const user = userEvent.setup();
     render(<MessageBubble role="assistant" content="Hello there" />);

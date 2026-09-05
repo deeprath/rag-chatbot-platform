@@ -95,4 +95,10 @@ describe("useSpeechRecognition", () => {
     act(() => result.current.stop());
     expect(lastInstance?.stop).toHaveBeenCalledOnce();
   });
+
+  it("recognizes in the language passed by the caller, not just navigator.language", () => {
+    const { result } = renderHook(() => useSpeechRecognition(vi.fn(), "hi-IN"));
+    act(() => result.current.start());
+    expect(lastInstance?.lang).toBe("hi-IN");
+  });
 });

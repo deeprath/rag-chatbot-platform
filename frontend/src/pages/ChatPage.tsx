@@ -7,15 +7,10 @@ import type { ChatMessageRead } from "../api/types";
 import { ChatComposer } from "../components/chat/ChatComposer";
 import { MessageBubble } from "../components/chat/MessageBubble";
 import { SessionSidebar } from "../components/chat/SessionSidebar";
+import { VoiceConversationOverlay } from "../components/chat/VoiceConversationOverlay";
 import { useVoiceConversation } from "../hooks/useVoiceConversation";
 import { useVoiceOutput } from "../hooks/useVoiceOutput";
 import { useVoicePreferences } from "../hooks/useVoicePreferences";
-
-const PHASE_LABEL: Record<string, string> = {
-  listening: "🎙️ Listening…",
-  thinking: "🤔 Thinking…",
-  speaking: "🔊 Speaking…",
-};
 
 export function ChatPage() {
   const queryClient = useQueryClient();
@@ -141,12 +136,20 @@ export function ChatPage() {
         onNewChat={handleNewChat}
       />
 
+      {voiceConversation.active && (
+        <VoiceConversationOverlay
+          phase={voiceConversation.phase}
+          error={voiceConversation.error}
+          lastTranscript={voiceConversation.lastTranscript}
+          onStop={voiceConversation.stop}
+        />
+      )}
+
       <div className="flex flex-1 flex-col">
         {voiceConversation.isSupported && (
           <div className="flex items-center justify-between border-b border-slate-100 px-6 py-2">
             <span className="text-xs text-slate-500">
-              {voiceConversation.active && PHASE_LABEL[voiceConversation.phase]}
-              {voiceConversation.error && (
+              {!voiceConversation.active && voiceConversation.error && (
                 <span className="text-red-600">Voice conversation error: {voiceConversation.error}</span>
               )}
             </span>

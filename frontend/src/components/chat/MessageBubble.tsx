@@ -30,7 +30,7 @@ export function MessageBubble({ role, content, pending }: MessageBubbleProps) {
         {canSpeak && (
           <button
             type="button"
-            onClick={() => (isSpeaking ? stop() : void speak(content))}
+            onClick={() => (isSpeaking ? stop() : void speak(content).catch(() => {}))}
             disabled={isLoading}
             title={isSpeaking ? "Stop reading aloud" : "Read aloud"}
             aria-label={isSpeaking ? "Stop reading aloud" : "Read message aloud"}
