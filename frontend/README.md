@@ -46,6 +46,28 @@ npm run test:coverage   # + lcov report (coverage/lcov.info), used by SonarQube
 npm run lint
 ```
 
+## Voice chat
+
+Speech-to-text (the composer's 🎤 button) and text-to-speech (each assistant
+message's 🔊 button, plus a "Read replies aloud" toggle for automatic
+playback) are both the browser's own native Web Speech API —
+`SpeechRecognition`/`webkitSpeechRecognition` and `speechSynthesis`. No audio
+or transcript is ever sent to our backend or any third party for this.
+
+- **Speech-to-text needs Chrome/Edge** (and partially Safari) — Firefox
+  doesn't implement `SpeechRecognition` at all. `useSpeechRecognition`
+  feature-detects this and the composer disables the mic button (with a
+  tooltip) rather than pretend it works everywhere.
+- **Text-to-speech is broadly supported** (Chrome, Firefox, Safari, Edge) via
+  `useSpeechSynthesis`.
+- Both need a **secure context** — `localhost` is fine for dev, but a real
+  deployment needs HTTPS for the mic (`SpeechRecognition.start()`) to work at
+  all; browsers refuse microphone access on plain HTTP for any non-localhost
+  origin.
+- The "Read replies aloud" preference is a per-viewer `localStorage` value
+  (`rag-chatbot:auto-speak-replies`), not synced across devices or sent to
+  the backend — see `src/pages/ChatPage.tsx`.
+
 ## Structure
 
 ```
@@ -53,5 +75,6 @@ src/
   api/         axios client, per-resource API calls, the hand-rolled SSE client (sse.ts)
   auth/        Keycloak (keycloak-js) integration — AuthProvider, useAuth()
   components/  Reusable UI (chat/, documents/, Layout)
-  pages/       Route-level components (ChatPage, DocumentsPage)
+  hooks/       useSpeechRecognition / useSpeechSynthesis (voice chat, browser-native)
+  pages/       Route-level components (ChatPage, DocumentsPage, SettingsPage)
 ```

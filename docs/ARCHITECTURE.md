@@ -24,7 +24,7 @@ flowchart LR
 
 | Component | Tech | Role |
 |---|---|---|
-| Frontend | React 18 + Vite + TypeScript + Tailwind | Chat UI, document upload, Keycloak login |
+| Frontend | React 18 + Vite + TypeScript + Tailwind | Chat UI (with voice input/output), document upload, Keycloak login |
 | Gateway | Kong (OSS) | Routing, CORS, rate-limiting for the API |
 | Backend | FastAPI + LangChain (LCEL) | RAG chat, document ingestion, auth |
 | Auth | Keycloak | OIDC identity provider |
@@ -50,6 +50,14 @@ flowchart LR
   things to keep in sync for no benefit. Kong's job here is routing, CORS,
   and rate-limiting only. See
   [`infra/kong/README.md`](../infra/kong/README.md).
+- **Voice chat (speech-to-text/text-to-speech) is entirely browser-native**
+  (`SpeechRecognition`/`speechSynthesis`, see
+  [`frontend/README.md`](../frontend/README.md#voice-chat)) — no backend
+  endpoint, no third-party API, no audio ever leaves the browser. The
+  tradeoff is browser support (`SpeechRecognition` is Chrome/Edge-only) and
+  voice quality (native TTS voices, not an AI voice) — a deliberate choice to
+  avoid adding a paid API dependency and a new attack/privacy surface for
+  what's fundamentally an input/output convenience, not a core feature.
 - **Keycloak gets its own Ingress host**, not a path prefix under the app's
   host — it has too many top-level paths (`/realms`, `/admin`, `/resources`,
   `/js`, ...) to enumerate as ingress rules. This is also *why* the backend

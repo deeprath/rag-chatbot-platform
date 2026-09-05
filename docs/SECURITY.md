@@ -175,6 +175,17 @@ coverage report paths, exclusions — is written and the coverage reports it
 needs are proven to generate correctly; only the server-side connection is
 unverified here.
 
+## Voice chat: no audio leaves the browser
+
+Speech-to-text and text-to-speech (see
+[`frontend/README.md`](../frontend/README.md#voice-chat)) use only the
+browser's built-in `SpeechRecognition`/`speechSynthesis` APIs — deliberately,
+so no recorded audio or transcript is ever sent to our backend or a
+third-party speech API. The one caveat worth knowing: Chrome's own
+`SpeechRecognition` implementation sends the captured audio to Google's
+servers for recognition (that's how Chrome does it, not something this app
+adds) — Firefox has no implementation at all, and Safari's is on-device.
+
 ## Local setup
 
 ```bash

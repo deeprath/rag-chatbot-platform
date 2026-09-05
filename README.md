@@ -74,7 +74,7 @@ npm run dev                      # http://localhost:5173
 | Object storage | MinIO |
 | Auth | Keycloak (OIDC) |
 | Gateway | Kong |
-| Frontend | React 18 + Vite + TypeScript + Tailwind CSS |
+| Frontend | React 18 + Vite + TypeScript + Tailwind CSS, with voice chat (browser Web Speech API) |
 | Containers/Orchestration | Docker, docker-compose, Helm, Kubernetes |
 | Security scanning | SonarQube, OWASP ZAP, Trivy, Gitleaks |
 | Testing | pytest (backend), Vitest (frontend) |

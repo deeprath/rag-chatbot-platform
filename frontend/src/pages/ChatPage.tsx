@@ -7,6 +7,18 @@ import type { ChatMessageRead } from "../api/types";
 import { ChatComposer } from "../components/chat/ChatComposer";
 import { MessageBubble } from "../components/chat/MessageBubble";
 import { SessionSidebar } from "../components/chat/SessionSidebar";
+import { useSpeechSynthesis } from "../hooks/useSpeechSynthesis";
+
+const AUTO_SPEAK_STORAGE_KEY = "rag-chatbot:auto-speak-replies";
+
+function loadAutoSpeakPreference(): boolean {
+  try {
+    return localStorage.getItem(AUTO_SPEAK_STORAGE_KEY) === "true";
+  } catch {
+    // Private browsing / storage blocked — default to off rather than throw.
+    return false;
+  }
+}
 
 export function ChatPage() {
   const queryClient = useQueryClient();
@@ -14,8 +26,18 @@ export function ChatPage() {
   const [pendingUserMessage, setPendingUserMessage] = useState<string | null>(null);
   const [streamingAssistant, setStreamingAssistant] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [autoSpeak, setAutoSpeak] = useState(loadAutoSpeakPreference);
   const abortControllerRef = useRef<AbortController | null>(null);
   const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
+  const { isSupported: ttsSupported, speak } = useSpeechSynthesis();
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(AUTO_SPEAK_STORAGE_KEY, String(autoSpeak));
+    } catch {
+      // Ignore — this is a convenience preference, not critical state.
+    }
+  }, [autoSpeak]);
 
   const sessionsQuery = useQuery({ queryKey: ["chat", "sessions"], queryFn: listSessions });
 
@@ -48,6 +70,7 @@ export function ChatPage() {
   const handleSend = (message: string) => {
     let activeSessionId = selectedSessionId;
     let failed = false;
+    let fullResponse = "";
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
@@ -62,7 +85,10 @@ export function ChatPage() {
           activeSessionId = sessionId;
           setSelectedSessionId(sessionId);
         },
-        onToken: (token) => setStreamingAssistant((prev) => (prev ?? "") + token),
+        onToken: (token) => {
+          fullResponse += token;
+          setStreamingAssistant((prev) => (prev ?? "") + token);
+        },
         onError: (errorMessage) => {
           failed = true;
           setStreamingAssistant((prev) => `${prev ?? ""}\n\n⚠️ ${errorMessage}`);
@@ -85,6 +111,7 @@ export function ChatPage() {
           // the next message is sent.
           if (!failed) {
             setStreamingAssistant(null);
+            if (autoSpeak) speak(fullResponse);
           }
         },
       },
@@ -112,6 +139,18 @@ export function ChatPage() {
       />
 
       <div className="flex flex-1 flex-col">
+        {ttsSupported && (
+          <div className="flex justify-end border-b border-slate-100 px-6 py-2">
+            <label className="flex items-center gap-1.5 text-xs text-slate-500">
+              <input
+                type="checkbox"
+                checked={autoSpeak}
+                onChange={(e) => setAutoSpeak(e.target.checked)}
+              />
+              🔊 Read replies aloud
+            </label>
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto p-6">
           {showEmptyState ? (
             <div className="flex h-full items-center justify-center text-slate-400">
