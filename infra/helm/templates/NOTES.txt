@@ -1,0 +1,22 @@
+RAG Chatbot deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+{{- if .Values.ingress.enabled }}
+
+Add these to /etc/hosts if they don't already point at your ingress controller's IP:
+
+  <ingress-ip>  {{ .Values.ingress.host }}
+  <ingress-ip>  {{ .Values.keycloak.host }}
+
+Then open:
+  App:      http://{{ .Values.ingress.host }}
+  Keycloak: http://{{ .Values.keycloak.host }}
+  API docs: http://{{ .Values.ingress.host }}/docs
+
+Log in with the seeded user: testuser / testuser123
+{{- else }}
+
+Ingress is disabled — use `kubectl port-forward` to reach the frontend/backend Services.
+{{- end }}
+
+Check rollout status:
+  kubectl get pods -n {{ .Release.Namespace }}

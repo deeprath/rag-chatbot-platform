@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "rag-chatbot.componentFullname" (list $ "minio") }}
+  labels:
+    {{- include "rag-chatbot.labels" $ | nindent 4 }}
+    {{- include "rag-chatbot.selectorLabels" (list $ "minio") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # single ReadWriteOnce PVC — avoid two pods mounting it at once
+  selector:
+    matchLabels:
+      {{- include "rag-chatbot.selectorLabels" (list $ "minio") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "rag-chatbot.selectorLabels" (list $ "minio") | nindent 8 }}
+    spec:
+      containers:
+        - name: minio
+          image: "{{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}"
+          securityContext:
+            {{- include "rag-chatbot.restrictedContainerSecurityContext" $ | nindent 12 }}
+          args: ["server", "/data", "--console-address", ":9001"]
+          ports:
+            - containerPort: 9000
+              name: api
+            - containerPort: 9001
+              name: console
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rag-chatbot.componentFullname" (list $ "secrets") }}
+                  key: minio-root-user
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rag-chatbot.componentFullname" (list $ "secrets") }}
+                  key: minio-root-password
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: api
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: api
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.minio.resources | nindent 12 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "rag-chatbot.componentFullname" (list $ "minio") }}

@@ -1,0 +1,14 @@
+# Trivy vulnerability ignore list. Every entry must justify itself — this file
+# is reviewed as part of the security scan output, not a place to silence
+# noise.
+
+# CVE-2024-23342 (ecdsa / python-ecdsa): Minerva timing side-channel in ECDSA
+# signing/verification. `ecdsa` is a *mandatory* transitive dependency of
+# python-jose (backend/app/core/security.py) regardless of which install extra
+# is used, and upstream has stated they won't fix side-channel issues in the
+# pure-Python implementation (see the advisory). We never exercise the
+# vulnerable code path: every jwt.decode() call in this codebase hardcodes
+# `algorithms=["RS256"]` (RSA, not ECDSA) — see app/core/security.py. Revisit
+# if the codebase ever adds an ECDSA-based algorithm, or when migrating off
+# python-jose.
+CVE-2024-23342

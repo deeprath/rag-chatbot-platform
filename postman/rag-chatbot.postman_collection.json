@@ -1,0 +1,192 @@
+{
+  "info": {
+    "name": "RAG Chatbot Platform",
+    "description": "FastAPI + LangChain RAG chatbot API. Built from the real OpenAPI spec (backend/app/main.py) against the 7 live endpoints — see docs/ARCHITECTURE.md for the full request flows.\n\nRun order: **Auth > Get Token** first (sets {{access_token}} for everything else), then anything else in any order. **Documents > Upload Document** sets {{document_id}}; **Chat > Send Message** sets {{session_id}}.\n\nAgainst docker-compose (default variable values): everything routes through Kong at http://localhost:8000/api/v1. Against the Helm chart, override `base_url`/`keycloak_url` to your Ingress hosts (see infra/helm/README.md).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000/api/v1" },
+    { "key": "keycloak_url", "value": "http://localhost:8080" },
+    { "key": "realm", "value": "rag-chatbot" },
+    { "key": "client_id", "value": "rag-chatbot-frontend" },
+    { "key": "username", "value": "testuser" },
+    { "key": "password", "value": "testuser123" },
+    { "key": "access_token", "value": "" },
+    { "key": "document_id", "value": "" },
+    { "key": "session_id", "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Get Token (password grant)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/x-www-form-urlencoded" }],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "grant_type", "value": "password" },
+                { "key": "client_id", "value": "{{client_id}}" },
+                { "key": "username", "value": "{{username}}" },
+                { "key": "password", "value": "{{password}}" }
+              ]
+            },
+            "url": {
+              "raw": "{{keycloak_url}}/realms/{{realm}}/protocol/openid-connect/token",
+              "host": ["{{keycloak_url}}"],
+              "path": ["realms", "{{realm}}", "protocol", "openid-connect", "token"]
+            },
+            "description": "Resource Owner Password Credentials grant — enabled on the `rag-chatbot-frontend` client deliberately for exactly this (curl/Postman convenience); the real SPA uses Authorization Code + PKCE instead. See infra/keycloak/README.md."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('access_token', body.access_token);",
+                  "pm.test('got an access token', () => pm.expect(body.access_token).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Liveness",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/health", "host": ["{{base_url}}"], "path": ["health"] }
+          }
+        },
+        {
+          "name": "Readiness",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/health/ready",
+              "host": ["{{base_url}}"],
+              "path": ["health", "ready"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "item": [
+        {
+          "name": "Upload Document",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [{ "key": "file", "type": "file", "src": [] }]
+            },
+            "url": { "raw": "{{base_url}}/documents", "host": ["{{base_url}}"], "path": ["documents"] },
+            "description": "PDF, DOCX, or TXT, up to 25 MB. Select a file for the `file` field before sending. Ingestion (extract -> chunk -> embed -> store) runs in the background — poll 'Get Document' until `status` is `ready` or `failed`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('document_id', body.id);",
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('starts pending', () => pm.expect(body.status).to.eql('pending'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Documents",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/documents", "host": ["{{base_url}}"], "path": ["documents"] },
+            "description": "Scoped to the authenticated user (the token's `sub` claim) — you'll only ever see your own documents."
+          }
+        },
+        {
+          "name": "Get Document",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/documents/{{document_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["documents", "{{document_id}}"]
+            },
+            "description": "Check ingestion status. `status`: pending -> processing -> ready (or failed, with `error_message` set)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chat",
+      "item": [
+        {
+          "name": "Send Message",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": null,\n  \"message\": \"What do my uploaded documents say?\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/chat", "host": ["{{base_url}}"], "path": ["chat"] },
+            "description": "Server-Sent Events response (`session`, `token`*, `error`?, `done`). Postman buffers the full stream and shows it as one response body once it completes rather than rendering tokens live — that's expected, not a bug. Omit `session_id` (or leave it null) to start a new session; pass an existing `{{session_id}}` to continue one.\n\nIf you get `event: error` / \"The assistant failed to generate a response\", the backend has no `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` configured — set one in `infra/.env` (or `backend/.env`) and restart the backend. Everything else (auth, session persistence, the user's message) still works without a key; only the actual LLM call needs one."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const match = pm.response.text().match(/event: session\\ndata: \"([^\"]+)\"/);",
+                  "if (match) { pm.collectionVariables.set('session_id', match[1]); }",
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('stream completed', () => pm.expect(pm.response.text()).to.include('event: done'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Sessions",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/chat/sessions",
+              "host": ["{{base_url}}"],
+              "path": ["chat", "sessions"]
+            }
+          }
+        },
+        {
+          "name": "Get Session Messages",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/chat/sessions/{{session_id}}/messages",
+              "host": ["{{base_url}}"],
+              "path": ["chat", "sessions", "{{session_id}}", "messages"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

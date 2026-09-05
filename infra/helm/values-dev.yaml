@@ -1,0 +1,9 @@
+# Overrides for a local kind/minikube cluster: `helm install ... -f values.yaml -f values-dev.yaml`
+# (values.yaml's defaults are already dev-shaped; this file is what's left that's
+# specific to "images built and loaded locally, not pulled from a registry.")
+
+image:
+  # Images are built locally and loaded straight into the cluster (`kind load
+  # docker-image` / `minikube image load`) rather than pulled from a registry —
+  # IfNotPresent would happily keep using an old image if the tag didn't change.
+  pullPolicy: Never

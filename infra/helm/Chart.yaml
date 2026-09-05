@@ -1,0 +1,13 @@
+apiVersion: v2
+name: rag-chatbot
+description: >
+  RAG chatbot platform: FastAPI + LangChain backend, React frontend, TimescaleDB
+  + pgvector, MinIO, Keycloak, and Kong. Self-contained chart — the dependent
+  services (Timescale/MinIO/Keycloak/Kong) are templated directly here rather
+  than pulled in as third-party subcharts, so the whole stack is one thing to
+  read, version, and reason about. Not intended as a general-purpose Timescale/
+  MinIO/Keycloak chart; swap those templates for managed cloud equivalents
+  (RDS/Timescale Cloud, S3, a managed Keycloak) in a real production deployment.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

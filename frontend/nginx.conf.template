@@ -1,0 +1,49 @@
+# Templated (not a plain .conf): the nginx/nginx-unprivileged base image's own
+# entrypoint script runs envsubst over every /etc/nginx/templates/*.template
+# file at container startup, writing the result to
+# /etc/nginx/conf.d/<name-without-.template>. That's the only reasonable way
+# to make CSP's connect-src environment-specific: docker-compose puts the API
+# gateway and Keycloak on different localhost *ports* (still different CSP
+# origins), while the Helm chart's Ingress puts Keycloak on an entirely
+# different *host* — a single static value can't cover both. Everything else
+# below is a fixed value, common to every deployment.
+
+# Suppress the nginx version from the Server response header (ZAP: "Server
+# Leaks Version Information").
+server_tokens off;
+
+server {
+    listen 8080;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+
+    # See security-headers.conf.template's own header comment for why this is
+    # `include`d again in every location below that sets its own add_header.
+    include /etc/nginx/conf.d/security-headers.conf;
+
+    # SPA: let React Router handle unknown paths client-side. index.html itself
+    # is tiny and references content-hashed assets, so force revalidation
+    # rather than letting it sit in a shared/browser cache.
+    location / {
+        include /etc/nginx/conf.d/security-headers.conf;
+        try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache" always;
+    }
+
+    location /health {
+        include /etc/nginx/conf.d/security-headers.conf;
+        return 200 "ok\n";
+        add_header Content-Type text/plain;
+    }
+
+    # Static assets are content-hashed by Vite — safe to cache aggressively.
+    location /assets/ {
+        include /etc/nginx/conf.d/security-headers.conf;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+}

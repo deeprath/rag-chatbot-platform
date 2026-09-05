@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "rag-chatbot.componentFullname" (list $ "frontend") }}
+  labels:
+    {{- include "rag-chatbot.labels" $ | nindent 4 }}
+    {{- include "rag-chatbot.selectorLabels" (list $ "frontend") | nindent 4 }}
+spec:
+  {{- if not .Values.frontend.autoscaling.enabled }}
+  replicas: {{ .Values.frontend.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "rag-chatbot.selectorLabels" (list $ "frontend") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "rag-chatbot.selectorLabels" (list $ "frontend") | nindent 8 }}
+    spec:
+      securityContext:
+        {{- include "rag-chatbot.hardenedPodSecurityContext" (list $ 101) | nindent 8 }}
+      containers:
+        - name: frontend
+          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- include "rag-chatbot.hardenedContainerSecurityContext" $ | nindent 12 }}
+          ports:
+            - containerPort: {{ .Values.frontend.containerPort }}
+              name: http
+          env:
+            # CSP connect-src/frame-src (see frontend/nginx.conf.template) —
+            # the origins the browser actually talks to. Must list both: the
+            # app's own Ingress host (Kong lives behind it, same origin) and
+            # Keycloak's separate host (see values.yaml's keycloak.host comment).
+            - name: CSP_CONNECT_SRC
+              value: "http://{{ .Values.ingress.host }} {{ .Values.keycloak.publicUrl }}"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+          volumeMounts:
+            # nginx-unprivileged (see frontend/Dockerfile) is pre-configured to
+            # keep its pid file, client body buffers, and proxy/fastcgi/etc.
+            # temp dirs all under /tmp specifically so this one mount is enough
+            # for nginx's own runtime state under a read-only root filesystem.
+            - name: tmp
+              mountPath: /tmp
+            # The base image's entrypoint envsubst's nginx.conf.template into
+            # this directory at container startup (see the Dockerfile) — it
+            # has to be writable even though everything else isn't.
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: nginx-conf
+          emptyDir: {}

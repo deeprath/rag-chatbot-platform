@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "rag-chatbot.componentFullname" (list $ "kong") }}
+  labels:
+    {{- include "rag-chatbot.labels" $ | nindent 4 }}
+    {{- include "rag-chatbot.selectorLabels" (list $ "kong") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "rag-chatbot.selectorLabels" (list $ "kong") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "rag-chatbot.selectorLabels" (list $ "kong") | nindent 8 }}
+      annotations:
+        # Force a rollout when the declarative config changes.
+        checksum/config: {{ include "rag-chatbot.kongConfig" $ | sha256sum }}
+    spec:
+      containers:
+        - name: kong
+          image: "{{ .Values.kong.image.repository }}:{{ .Values.kong.image.tag }}"
+          securityContext:
+            {{- include "rag-chatbot.restrictedContainerSecurityContext" $ | nindent 12 }}
+          env:
+            - name: KONG_DATABASE
+              value: "off"
+            - name: KONG_DECLARATIVE_CONFIG
+              value: /kong/kong.yml
+            - name: KONG_PROXY_LISTEN
+              value: "0.0.0.0:8000"
+            - name: KONG_NGINX_WORKER_PROCESSES
+              value: {{ .Values.kong.nginxWorkerProcesses | quote }}
+          ports:
+            - containerPort: 8000
+              name: proxy
+          volumeMounts:
+            - name: kong-config
+              mountPath: /kong
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: proxy
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: proxy
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.kong.resources | nindent 12 }}
+      volumes:
+        - name: kong-config
+          configMap:
+            name: {{ include "rag-chatbot.componentFullname" (list $ "kong-config") }}

@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "rag-chatbot.componentFullname" (list $ "timescaledb") }}
+  labels:
+    {{- include "rag-chatbot.labels" $ | nindent 4 }}
+    {{- include "rag-chatbot.selectorLabels" (list $ "timescaledb") | nindent 4 }}
+spec:
+  serviceName: {{ include "rag-chatbot.componentFullname" (list $ "timescaledb") }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "rag-chatbot.selectorLabels" (list $ "timescaledb") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "rag-chatbot.selectorLabels" (list $ "timescaledb") | nindent 8 }}
+    spec:
+      containers:
+        - name: timescaledb
+          image: "{{ .Values.timescaledb.image.repository }}:{{ .Values.timescaledb.image.tag }}"
+          securityContext:
+            {{- include "rag-chatbot.restrictedContainerSecurityContext" $ | nindent 12 }}
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.timescaledb.username | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.timescaledb.database | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rag-chatbot.componentFullname" (list $ "secrets") }}
+                  key: postgres-password
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.timescaledb.username | quote }}]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.timescaledb.username | quote }}]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.timescaledb.resources | nindent 12 }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.timescaledb.storage.storageClassName }}
+        storageClassName: {{ .Values.timescaledb.storage.storageClassName | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.timescaledb.storage.size }}

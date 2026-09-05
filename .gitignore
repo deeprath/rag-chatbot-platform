@@ -1,0 +1,46 @@
+# --- Python / backend ---
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+backend/.env
+
+# --- Node / frontend ---
+node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/.env.local
+frontend/.env.*.local
+npm-debug.log*
+
+# --- Security scan output (Trivy/ZAP reports) ---
+*-report.json
+*-report.html
+*-report.sarif
+
+# --- Env / secrets ---
+.env
+*.env.local
+
+# --- Docker / infra local state ---
+infra/**/data/
+infra/**/*.local.yml
+
+# --- Editor / OS ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# --- Local agent tooling (machine-specific paths, not portable) ---
+.claude/
+
+# --- Misc ---
+*.log
+infra/security/reports/

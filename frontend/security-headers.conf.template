@@ -1,0 +1,16 @@
+# Included from every location block in nginx.conf.template (see its header
+# comment for why this is a .template at all). Every location block that sets
+# its own add_header (e.g. /assets/'s Cache-Control) needs its own `include`
+# of this file too: nginx's add_header directive is NOT additive across
+# nesting — a location block with any add_header of its own discards ones
+# inherited from its parent server block entirely, it doesn't merge with them.
+add_header X-Content-Type-Options "nosniff" always;
+add_header X-Frame-Options "DENY" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+add_header Cross-Origin-Opener-Policy "same-origin" always;
+add_header Cross-Origin-Resource-Policy "same-origin" always;
+add_header Cross-Origin-Embedder-Policy "require-corp" always;
+# 'unsafe-inline' on style-src: Tailwind's runtime + React inline the odd
+# style attribute; everything else stays locked to same-origin.
+add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ${CSP_CONNECT_SRC}; frame-src ${CSP_CONNECT_SRC}; form-action 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'" always;

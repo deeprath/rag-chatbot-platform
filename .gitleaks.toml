@@ -1,0 +1,20 @@
+# Gitleaks config. Default ruleset (gitleaks maintains a broad, well-tested
+# set of provider-specific rules) plus project-specific allowlisting for
+# values that look like secrets but are deliberate, non-sensitive local-dev
+# defaults documented throughout infra/*/README.md and *.env.example files.
+title = "rag-chatbot gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known-safe local-dev-only defaults, never used outside a throwaway container"
+regexes = [
+  '''minioadmin''',                 # infra default MinIO root credentials (dev only)
+  '''testuser123''',                # seeded Keycloak demo user password (infra/keycloak/realm-export.json)
+]
+paths = [
+  '''\.env\.example$''',
+  '''infra/\.env\.example$''',
+  '''infra/keycloak/realm-export\.json$''',
+]

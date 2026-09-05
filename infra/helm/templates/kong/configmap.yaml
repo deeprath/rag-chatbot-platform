@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rag-chatbot.componentFullname" (list $ "kong-config") }}
+  labels:
+    {{- include "rag-chatbot.labels" $ | nindent 4 }}
+data:
+  # K8s-specific counterpart of infra/kong/kong.yml: same role (routing, CORS,
+  # rate-limiting only — JWT verification stays in the backend, see
+  # docs/ARCHITECTURE.md), but the upstream service name differs from
+  # docker-compose's, so this isn't shared verbatim with that file.
+  kong.yml: |-
+    {{- include "rag-chatbot.kongConfig" $ | nindent 4 }}

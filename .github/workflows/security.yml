@@ -1,0 +1,170 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly: catches newly-disclosed CVEs against unchanged code/images —
+    # base-image OS packages in particular move faster than our own commits.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  gitleaks:
+    name: Gitleaks (secret scanning)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  trivy-fs:
+    name: Trivy (our own dependencies)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Fails the build: these are dependencies we chose and can bump
+      # ourselves — see .trivyignore for the one deliberate, justified
+      # exception (CVE-2024-23342 / ecdsa, unreachable given how we use
+      # python-jose — see the file for the full reasoning).
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          trivyignores: .trivyignore
+          exit-code: "1"
+
+  trivy-config:
+    name: Trivy (Dockerfiles, Helm, k8s)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Informational (exit-code 0): the remaining findings here are a
+      # documented, deliberate tradeoff (third-party images we don't fully
+      # control the entrypoint of — timescaledb/minio/keycloak/kong aren't
+      # forced to run read-only/non-root) — see docs/SECURITY.md and
+      # infra/helm/templates/_helpers.tpl's restrictedContainerSecurityContext
+      # comment for the reasoning. Still runs and is visible on every PR.
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+
+  trivy-image:
+    name: Trivy image scan (${{ matrix.component }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        component: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t rag-chatbot-${{ matrix.component }}:scan ${{ matrix.component }}
+
+      # Fails the build: our own application dependencies (Python/npm
+      # packages), which we can fix immediately by bumping a lockfile.
+      - name: Scan application dependencies
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: rag-chatbot-${{ matrix.component }}:scan
+          scanners: vuln
+          pkg-types: library
+          severity: HIGH,CRITICAL
+          trivyignores: .trivyignore
+          exit-code: "1"
+
+      # Informational: base OS image packages move on their own upstream
+      # patch cadence, independent of our commits — see docs/SECURITY.md.
+      - name: Scan full image (incl. OS packages, informational)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: rag-chatbot-${{ matrix.component }}:scan
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          trivyignores: .trivyignore
+          exit-code: "0"
+
+  sonar:
+    name: SonarQube
+    runs-on: ubuntu-latest
+    # Only runs once a SonarQube/SonarCloud project is actually wired up —
+    # see docs/SECURITY.md for what that setup looks like. Silently skipped
+    # otherwise rather than failing every PR on a secret nobody's configured.
+    if: ${{ vars.SONAR_ENABLED == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.5.11"
+      - name: Backend coverage
+        working-directory: backend
+        run: |
+          uv sync --frozen
+          uv run pytest --cov=app --cov-report=xml
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - name: Frontend coverage
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run test:coverage
+
+      - uses: SonarSource/sonarqube-scan-action@v4
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+  zap:
+    name: OWASP ZAP (full stack)
+    runs-on: ubuntu-latest
+    # Not on every PR: needs the whole docker-compose stack up (Timescale,
+    # MinIO, Keycloak, Kong, backend, frontend) — slow, and mostly useful for
+    # catching regressions in response headers/exposed surface rather than
+    # something that changes every commit.
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bring up the stack
+        working-directory: infra
+        run: |
+          cp .env.example .env
+          docker compose up -d --build
+          for i in $(seq 1 30); do
+            docker compose ps --format json | grep -q '"Health":"starting"' || break
+            sleep 5
+          done
+          docker compose ps
+
+      - name: Run ZAP scans
+        run: |
+          FRONTEND_URL=http://localhost:5173 API_URL=http://localhost:8000 \
+            ./infra/security/zap-scan.sh
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-reports
+          path: infra/security/reports/
+          retention-days: 30
+
+      - name: Tear down
+        if: always()
+        working-directory: infra
+        run: docker compose down -v

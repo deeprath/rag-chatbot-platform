@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* This app has a single light theme for now (no dark-mode variant built yet),
+   so pin color-scheme explicitly rather than inheriting the host/OS preference
+   — otherwise a dark host theme keeps the page's own background transparent-ish
+   and Tailwind's dark text becomes unreadable dark-on-dark. */
+html {
+  color-scheme: light;
+  background-color: #f8fafc; /* slate-50, matches Layout's page background */
+}

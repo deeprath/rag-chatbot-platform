@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "rag-chatbot.componentFullname" (list $ "backend") }}
+  labels:
+    {{- include "rag-chatbot.labels" $ | nindent 4 }}
+    {{- include "rag-chatbot.selectorLabels" (list $ "backend") | nindent 4 }}
+spec:
+  {{- if not .Values.backend.autoscaling.enabled }}
+  replicas: {{ .Values.backend.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "rag-chatbot.selectorLabels" (list $ "backend") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "rag-chatbot.selectorLabels" (list $ "backend") | nindent 8 }}
+    spec:
+      # Runs `alembic upgrade head` before the backend ever serves traffic.
+      # This is an initContainer rather than a separate pre-install Job because
+      # a Helm pre-install hook would run *before* the timescaledb StatefulSet
+      # below even exists — there'd be nothing to migrate yet. initContainers
+      # give us the ordering we actually want (DB reachable -> migrate ->
+      # *then* start serving) using a plain Kubernetes guarantee instead of
+      # fighting Helm's hook lifecycle. `alembic upgrade head` is idempotent,
+      # so redundant runs across replicas/rollouts are harmless.
+      securityContext:
+        {{- include "rag-chatbot.hardenedPodSecurityContext" (list $ 1000) | nindent 8 }}
+      initContainers:
+        - name: migrate
+          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["alembic", "upgrade", "head"]
+          securityContext:
+            {{- include "rag-chatbot.hardenedContainerSecurityContext" $ | nindent 12 }}
+          env:
+            {{- include "rag-chatbot.backendEnv" $ | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      containers:
+        - name: backend
+          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- include "rag-chatbot.hardenedContainerSecurityContext" $ | nindent 12 }}
+          ports:
+            - containerPort: {{ .Values.backend.containerPort }}
+              name: http
+          env:
+            - name: ENVIRONMENT
+              value: {{ .Values.backend.env.environment | quote }}
+            - name: DEBUG
+              value: {{ .Values.backend.env.debug | quote }}
+            {{- include "rag-chatbot.backendEnv" $ | nindent 12 }}
+            - name: MINIO_ENDPOINT
+              value: "{{ include "rag-chatbot.componentFullname" (list $ "minio") }}:9000"
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rag-chatbot.componentFullname" (list $ "secrets") }}
+                  key: minio-root-user
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rag-chatbot.componentFullname" (list $ "secrets") }}
+                  key: minio-root-password
+            # See values.yaml's keycloak.host comment for why these two differ.
+            - name: KEYCLOAK_SERVER_URL
+              value: "http://{{ include "rag-chatbot.componentFullname" (list $ "keycloak") }}:8080"
+            - name: KEYCLOAK_ISSUER_URL
+              value: {{ .Values.keycloak.publicUrl | quote }}
+            - name: KEYCLOAK_REALM
+              value: {{ .Values.keycloak.realm | quote }}
+            - name: KEYCLOAK_AUDIENCE
+              value: "rag-chatbot-backend"
+            - name: LLM_PROVIDER
+              value: {{ .Values.backend.env.llmProvider | quote }}
+            - name: ANTHROPIC_MODEL
+              value: {{ .Values.backend.env.anthropicModel | quote }}
+            - name: OPENAI_MODEL
+              value: {{ .Values.backend.env.openaiModel | quote }}
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rag-chatbot.componentFullname" (list $ "secrets") }}
+                  key: anthropic-api-key
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rag-chatbot.componentFullname" (list $ "secrets") }}
+                  key: openai-api-key
+            - name: CORS_ALLOW_ORIGINS
+              value: {{ .Values.backend.env.corsAllowOrigins | quote }}
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health/ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: hf-cache
+              # Must match HF_HOME in backend/Dockerfile — where
+              # sentence-transformers caches the embedding model on first use.
+              mountPath: /home/app/.cache/huggingface
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: hf-cache
+          emptyDir: {}

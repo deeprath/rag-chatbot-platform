@@ -1,0 +1,49 @@
+_format_version: "3.0"
+_transform: true
+
+# Kong's job here is routing/CORS/rate-limiting for the API — JWT verification
+# happens in the FastAPI backend itself (app/core/security.py), against the same
+# Keycloak JWKS, so Kong doesn't need its own auth plugin or a Keycloak client of
+# its own. See docs/ARCHITECTURE.md for the full request-flow rationale.
+#
+# `url` below targets the docker-compose service name (added in Phase 7). For
+# ad-hoc verification against a backend running directly on the host (outside
+# compose), override it with `host.docker.internal` instead — see
+# infra/kong/README.md.
+
+services:
+  - name: rag-chatbot-backend
+    url: http://backend:8000
+    routes:
+      - name: rag-chatbot-backend-route
+        paths:
+          - /api
+          - /docs
+          - /redoc
+          - /openapi.json
+        strip_path: false
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - http://localhost:5173
+          methods:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+          headers:
+            - Authorization
+            - Content-Type
+            - Accept
+          credentials: true
+          max_age: 3600
+      - name: rate-limiting
+        config:
+          minute: 60
+          policy: local
+      - name: request-size-limiting
+        config:
+          allowed_payload_size: 26 # MB; a little above the backend's own 25 MB upload cap

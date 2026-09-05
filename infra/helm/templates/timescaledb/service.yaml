@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "rag-chatbot.componentFullname" (list $ "timescaledb") }}
+  labels:
+    {{- include "rag-chatbot.labels" $ | nindent 4 }}
+    {{- include "rag-chatbot.selectorLabels" (list $ "timescaledb") | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    {{- include "rag-chatbot.selectorLabels" (list $ "timescaledb") | nindent 4 }}
+  ports:
+    - port: 5432
+      targetPort: postgres
+      name: postgres
