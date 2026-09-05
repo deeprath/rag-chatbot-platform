@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 
-import { useAuth } from "../auth/AuthProvider";
+import { useAuth } from "../auth/useAuth";
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `rounded-md px-3 py-2 text-sm font-medium ${

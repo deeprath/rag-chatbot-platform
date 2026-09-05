@@ -10,10 +10,10 @@ jobs:
     name: Backend (lint, test, coverage)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v10.0.1
         with:
           version: "0.5.11"
 
@@ -37,7 +37,7 @@ jobs:
         run: uv run pytest --cov=app --cov-report=xml --cov-report=term
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: backend-coverage
           path: backend/coverage.xml
@@ -47,9 +47,9 @@ jobs:
     name: Frontend (lint, test, build)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.0.0
         with:
           node-version: "24"
           cache: "npm"
@@ -81,7 +81,7 @@ jobs:
         run: npm run build
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: frontend-coverage
           path: frontend/coverage/lcov.info
@@ -91,9 +91,9 @@ jobs:
     name: Helm lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5.0.1
         with:
           version: "v3.16.3"
 

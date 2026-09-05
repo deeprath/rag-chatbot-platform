@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
-import { useAuth } from "./auth/AuthProvider";
+import { useAuth } from "./auth/useAuth";
 import { Layout } from "./components/Layout";
 import { ChatPage } from "./pages/ChatPage";
 import { DocumentsPage } from "./pages/DocumentsPage";

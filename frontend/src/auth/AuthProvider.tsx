@@ -1,24 +1,7 @@
-import {
-  createContext,
-  type PropsWithChildren,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { type PropsWithChildren, useEffect, useMemo, useState } from "react";
 
 import { initKeycloakOnce, keycloak } from "./keycloak";
-
-interface AuthContextValue {
-  authenticated: boolean;
-  initializing: boolean;
-  token: string | undefined;
-  username: string | undefined;
-  login: () => void;
-  logout: () => void;
-}
-
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+import { AuthContext, type AuthContextValue } from "./useAuth";
 
 /**
  * Bootstraps Keycloak (Authorization Code + PKCE), keeps the access token fresh,
@@ -110,10 +93,4 @@ export function AuthProvider({ children }: PropsWithChildren) {
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within an AuthProvider");
-  return ctx;
 }
