@@ -72,12 +72,17 @@ jobs:
 
       # Fails the build: our own application dependencies (Python/npm
       # packages), which we can fix immediately by bumping a lockfile.
+      # `vuln-type`, not `pkg-types` — the latter was never a real
+      # trivy-action input (confirmed against action.yaml: it's an
+      # unimplemented maintainer TODO to rename `vuln-type`), so it was
+      # silently ignored and this step scanned OS packages too — the exact
+      # ~54 findings meant to be informational-only in the next job below.
       - name: Scan application dependencies
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: rag-chatbot-${{ matrix.component }}:scan
           scanners: vuln
-          pkg-types: library
+          vuln-type: library
           severity: HIGH,CRITICAL
           trivyignores: .trivyignore
           exit-code: "1"
