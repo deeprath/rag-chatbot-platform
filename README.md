@@ -81,4 +81,4 @@ npm run dev                      # http://localhost:5173
 
 ## License
 
-Not yet decided — add one before making this repository public.
+[MIT](LICENSE)
