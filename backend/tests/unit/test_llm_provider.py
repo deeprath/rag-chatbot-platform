@@ -47,6 +47,18 @@ def test_ollama_needs_no_api_key_and_builds_chat_ollama() -> None:
     assert type(model).__name__ == "ChatOllama"
 
 
+def test_groq_without_api_key_raises() -> None:
+    settings = _settings(llm_provider="groq", groq_api_key=None)
+    with pytest.raises(LLMConfigurationError, match="GROQ_API_KEY"):
+        _build_chat_model(settings)
+
+
+def test_groq_with_api_key_builds_chat_groq() -> None:
+    settings = _settings(llm_provider="groq", groq_api_key="gsk-test-key")
+    model = _build_chat_model(settings)
+    assert type(model).__name__ == "ChatGroq"
+
+
 # --- resolve_chat_model: per-user Settings override (see app/api/v1/routers/llm_settings.py) ---
 
 
@@ -55,6 +67,7 @@ class _FakeRow:
         self.provider = kwargs.get("provider")
         self.encrypted_anthropic_key = kwargs.get("encrypted_anthropic_key")
         self.encrypted_openai_key = kwargs.get("encrypted_openai_key")
+        self.encrypted_groq_key = kwargs.get("encrypted_groq_key")
 
 
 async def test_resolve_chat_model_falls_back_to_env_default_when_user_has_no_row(
@@ -112,3 +125,70 @@ async def test_resolve_chat_model_user_ollama_choice_needs_no_key(
 
     model = await resolve_chat_model(db=None, owner_id="user-1")  # type: ignore[arg-type]
     assert type(model).__name__ == "ChatOllama"
+
+
+async def test_resolve_chat_model_uses_users_decrypted_groq_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings_with_key = _settings(secret_encryption_key=Fernet.generate_key().decode())
+    ciphertext = encrypt_secret("gsk-users-own-key", settings_with_key)
+
+    async def fake_get_settings(_db: object, _owner_id: str) -> UserLLMSettings | None:
+        return _FakeRow(provider="groq", encrypted_groq_key=ciphertext)  # type: ignore[return-value]
+
+    monkeypatch.setattr(llm_settings_repository, "get_settings", fake_get_settings)
+    monkeypatch.setattr(llm_provider, "get_settings", lambda: settings_with_key)
+
+    model = await resolve_chat_model(db=None, owner_id="user-1")  # type: ignore[arg-type]
+    assert type(model).__name__ == "ChatGroq"
+    assert model.groq_api_key.get_secret_value() == "gsk-users-own-key"
+
+
+async def test_resolve_chat_model_raises_clear_error_for_groq_without_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_get_settings(_db: object, _owner_id: str) -> UserLLMSettings | None:
+        return _FakeRow(provider="groq", encrypted_groq_key=None)  # type: ignore[return-value]
+
+    monkeypatch.setattr(llm_settings_repository, "get_settings", fake_get_settings)
+    monkeypatch.setattr(llm_provider, "get_settings", lambda: _settings())
+
+    with pytest.raises(LLMConfigurationError, match="No Groq API key saved"):
+        await resolve_chat_model(db=None, owner_id="user-1")  # type: ignore[arg-type]
+
+
+# --- check_ollama_available ---
+
+
+async def test_check_ollama_available_true_when_server_responds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"models": []})
+
+    class FakeAsyncClient(httpx.AsyncClient):
+        def __init__(self, *args, **kwargs):
+            kwargs["transport"] = httpx.MockTransport(handler)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", FakeAsyncClient)
+    assert await llm_provider.check_ollama_available(_settings()) is True
+
+
+async def test_check_ollama_available_false_when_unreachable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    class FakeAsyncClient(httpx.AsyncClient):
+        def __init__(self, *args, **kwargs):
+            kwargs["transport"] = httpx.MockTransport(handler)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", FakeAsyncClient)
+    assert await llm_provider.check_ollama_available(_settings()) is False

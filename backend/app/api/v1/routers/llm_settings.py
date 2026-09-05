@@ -22,24 +22,39 @@ from app.db.session import get_db
 from app.models.llm_settings import UserLLMSettings
 from app.repositories import llm_settings_repository
 from app.schemas.llm_settings import LLMSettingsRead, LLMSettingsUpdate
+from app.services.llm_provider import check_ollama_available
 
 router = APIRouter(prefix="/settings/llm", tags=["settings"])
 
+# provider -> (encrypted-key column, masked-preview column) on UserLLMSettings,
+# for the providers that need a key at all ("ollama" is deliberately absent).
+_KEY_FIELDS: dict[str, tuple[str, str]] = {
+    "anthropic": ("encrypted_anthropic_key", "anthropic_key_preview"),
+    "openai": ("encrypted_openai_key", "openai_key_preview"),
+    "groq": ("encrypted_groq_key", "groq_key_preview"),
+}
 
-def _to_read_model(row: UserLLMSettings | None) -> LLMSettingsRead:
+
+async def _to_read_model(row: UserLLMSettings | None) -> LLMSettingsRead:
+    ollama_available = await check_ollama_available()
     if row is None:
         # No row yet — this user is on the deployment-wide LLM_PROVIDER default.
         return LLMSettingsRead(
             provider=get_settings().llm_provider,
             has_anthropic_key=False,
             has_openai_key=False,
+            has_groq_key=False,
+            ollama_available=ollama_available,
         )
     return LLMSettingsRead(
         provider=row.provider,  # type: ignore[arg-type]
         has_anthropic_key=row.encrypted_anthropic_key is not None,
         has_openai_key=row.encrypted_openai_key is not None,
+        has_groq_key=row.encrypted_groq_key is not None,
         anthropic_key_preview=row.anthropic_key_preview,
         openai_key_preview=row.openai_key_preview,
+        groq_key_preview=row.groq_key_preview,
+        ollama_available=ollama_available,
     )
 
 
@@ -48,7 +63,7 @@ async def get_llm_settings(
     owner_id: str = Depends(get_current_owner_id),
     db: AsyncSession = Depends(get_db),
 ) -> LLMSettingsRead:
-    return _to_read_model(await llm_settings_repository.get_settings(db, owner_id))
+    return await _to_read_model(await llm_settings_repository.get_settings(db, owner_id))
 
 
 @router.put("", response_model=LLMSettingsRead)
@@ -61,12 +76,8 @@ async def update_llm_settings(
     settings = get_settings()
     updates: dict[str, object] = {}
 
-    if payload.provider in ("anthropic", "openai"):
-        key_field, preview_field = (
-            ("encrypted_anthropic_key", "anthropic_key_preview")
-            if payload.provider == "anthropic"
-            else ("encrypted_openai_key", "openai_key_preview")
-        )
+    if payload.provider in _KEY_FIELDS:
+        key_field, preview_field = _KEY_FIELDS[payload.provider]
         already_has_key = bool(existing and getattr(existing, key_field))
 
         if payload.clear_api_key:
@@ -84,10 +95,23 @@ async def update_llm_settings(
                 ),
             )
         # else: switching to a provider that already has a saved key — reuse it.
-    # provider == "ollama": no key involved; any api_key/clear_api_key on the
-    # payload is simply ignored rather than touching either stored key.
+    elif payload.provider == "ollama":
+        # Any api_key/clear_api_key on the payload is simply ignored — Ollama
+        # needs no key. It does need to actually be reachable, though: unlike
+        # a missing API key (fixable by pasting one in), an unreachable local
+        # server can't be fixed from this form, so reject it up front with a
+        # clear next step instead of saving a choice that will just fail on
+        # the first chat message.
+        if not await check_ollama_available(settings):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"Ollama isn't reachable at {settings.ollama_base_url}. Start it with "
+                    "`make ollama-up` (see infra/README.md) or choose another provider."
+                ),
+            )
 
     row = await llm_settings_repository.upsert_settings(
         db, owner_id, provider=payload.provider, **updates
     )
-    return _to_read_model(row)
+    return await _to_read_model(row)

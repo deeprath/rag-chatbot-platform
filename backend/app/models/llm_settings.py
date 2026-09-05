@@ -2,10 +2,11 @@
 
 One row per Keycloak user (`owner_id`, same identity used everywhere else —
 documents, chat sessions). API keys are stored only as Fernet ciphertext (see
-app/core/crypto.py) — this table never holds a plaintext key. Anthropic and
-OpenAI keys are kept in separate columns (rather than one column that gets
-overwritten) so switching `provider` back and forth doesn't make you re-enter
-a key you already saved.
+app/core/crypto.py) — this table never holds a plaintext key. Anthropic,
+OpenAI, and Groq keys are kept in separate columns (rather than one column
+that gets overwritten) so switching `provider` back and forth doesn't make you
+re-enter a key you already saved. Ollama needs no key (see
+app/services/llm_provider.check_ollama_available for its live health check).
 """
 
 from sqlalchemy import String, Text
@@ -22,11 +23,13 @@ class UserLLMSettings(Base, UpdatedAtMixin):
     provider: Mapped[str] = mapped_column(String(32), nullable=False)
     encrypted_anthropic_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     encrypted_openai_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    encrypted_groq_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     # A short, non-reversible display string (e.g. "sk-ant-…a1b2"), computed
     # once at write time from the plaintext the request already had in hand.
     # Storing this separately means displaying "a key is saved, ending in
     # ...a1b2" never requires decrypting the real key again later — GET reads
-    # these two columns only; encrypted_*_key is decrypted nowhere but
+    # these columns only; encrypted_*_key is decrypted nowhere but
     # app/services/llm_provider.py, right before an actual provider API call.
     anthropic_key_preview: Mapped[str | None] = mapped_column(String(32), nullable=True)
     openai_key_preview: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    groq_key_preview: Mapped[str | None] = mapped_column(String(32), nullable=True)

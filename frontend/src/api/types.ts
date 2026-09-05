@@ -24,14 +24,20 @@ export interface ChatMessageRead {
   created_at: string;
 }
 
-export type LLMProvider = "anthropic" | "openai" | "ollama";
+export type LLMProvider = "anthropic" | "openai" | "groq" | "ollama";
 
 export interface LLMSettingsRead {
   provider: LLMProvider;
   has_anthropic_key: boolean;
   has_openai_key: boolean;
+  has_groq_key: boolean;
   anthropic_key_preview: string | null;
   openai_key_preview: string | null;
+  groq_key_preview: string | null;
+  // Live-checked server-side — Ollama is optional/resource-heavy (see
+  // infra/Makefile's `ollama-up`), so this reflects whether it's actually
+  // running right now rather than assuming so.
+  ollama_available: boolean;
 }
 
 export interface LLMSettingsUpdate {

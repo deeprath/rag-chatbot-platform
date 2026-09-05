@@ -20,6 +20,8 @@ async def upsert_settings(
     anthropic_key_preview: str | None | object = _UNSET,
     encrypted_openai_key: str | None | object = _UNSET,
     openai_key_preview: str | None | object = _UNSET,
+    encrypted_groq_key: str | None | object = _UNSET,
+    groq_key_preview: str | None | object = _UNSET,
 ) -> UserLLMSettings:
     """Creates or updates the row for `owner_id`.
 
@@ -44,6 +46,10 @@ async def upsert_settings(
         row.encrypted_openai_key = encrypted_openai_key  # type: ignore[assignment]
     if openai_key_preview is not _UNSET:
         row.openai_key_preview = openai_key_preview  # type: ignore[assignment]
+    if encrypted_groq_key is not _UNSET:
+        row.encrypted_groq_key = encrypted_groq_key  # type: ignore[assignment]
+    if groq_key_preview is not _UNSET:
+        row.groq_key_preview = groq_key_preview  # type: ignore[assignment]
 
     await db.commit()
     await db.refresh(row)

@@ -2,13 +2,24 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { getLLMSettings, updateLLMSettings } from "../api/settings";
-import type { LLMProvider } from "../api/types";
+import type { LLMProvider, LLMSettingsRead } from "../api/types";
 
 const PROVIDERS: { value: LLMProvider; label: string; needsKey: boolean }[] = [
   { value: "ollama", label: "Ollama (local, no API key)", needsKey: false },
   { value: "anthropic", label: "Anthropic Claude", needsKey: true },
   { value: "openai", label: "OpenAI", needsKey: true },
+  { value: "groq", label: "Groq", needsKey: true },
 ];
+
+// Maps a key-based provider to its corresponding fields on LLMSettingsRead —
+// mirrors backend/app/api/v1/routers/llm_settings.py's _KEY_FIELDS.
+const KEY_FIELDS: Partial<
+  Record<LLMProvider, { has: keyof LLMSettingsRead; preview: keyof LLMSettingsRead }>
+> = {
+  anthropic: { has: "has_anthropic_key", preview: "anthropic_key_preview" },
+  openai: { has: "has_openai_key", preview: "openai_key_preview" },
+  groq: { has: "has_groq_key", preview: "groq_key_preview" },
+};
 
 function errorMessage(error: unknown): string {
   const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
@@ -50,14 +61,10 @@ export function SettingsPage() {
 
   const data = settingsQuery.data;
   const selected = PROVIDERS.find((p) => p.value === provider)!;
-  const hasKey =
-    provider === "anthropic" ? data?.has_anthropic_key : provider === "openai" ? data?.has_openai_key : false;
-  const keyPreview =
-    provider === "anthropic"
-      ? data?.anthropic_key_preview
-      : provider === "openai"
-        ? data?.openai_key_preview
-        : null;
+  const keyFields = KEY_FIELDS[provider];
+  const hasKey = keyFields ? Boolean(data?.[keyFields.has]) : false;
+  const keyPreview = keyFields ? ((data?.[keyFields.preview] as string | null) ?? null) : null;
+  const ollamaAvailable = data?.ollama_available ?? false;
 
   function handleSave() {
     setSavedMessage(null);
@@ -81,32 +88,48 @@ export function SettingsPage() {
     <div className="mx-auto max-w-2xl">
       <h1 className="mb-2 text-xl font-semibold text-slate-900">Settings</h1>
       <p className="mb-6 text-sm text-slate-500">
-        Choose which model answers your chats. Ollama needs no API key; Anthropic and
-        OpenAI need your own — it's encrypted before it's stored and is never shown
-        again once saved.
+        Choose which model answers your chats. Ollama needs no API key (but must be
+        running locally); Anthropic, OpenAI, and Groq need your own key — it's
+        encrypted before it's stored and is never shown again once saved.
       </p>
 
       <div className="space-y-3 rounded-md border border-slate-200 bg-white p-4">
         <fieldset className="space-y-2">
           <legend className="mb-1 text-sm font-medium text-slate-900">LLM provider</legend>
-          {PROVIDERS.map((p) => (
-            <label key={p.value} className="flex items-center gap-2 text-sm text-slate-700">
-              <input
-                type="radio"
-                name="llm-provider"
-                value={p.value}
-                checked={provider === p.value}
-                onChange={() => {
-                  setProvider(p.value);
-                  setApiKeyInput("");
-                  setValidationError(null);
-                  setSavedMessage(null);
-                }}
-              />
-              {p.label}
-            </label>
-          ))}
+          {PROVIDERS.map((p) => {
+            const disabled = p.value === "ollama" && !ollamaAvailable;
+            return (
+              <label
+                key={p.value}
+                className={`flex items-center gap-2 text-sm ${disabled ? "text-slate-400" : "text-slate-700"}`}
+              >
+                <input
+                  type="radio"
+                  name="llm-provider"
+                  value={p.value}
+                  checked={provider === p.value}
+                  disabled={disabled}
+                  onChange={() => {
+                    setProvider(p.value);
+                    setApiKeyInput("");
+                    setValidationError(null);
+                    setSavedMessage(null);
+                  }}
+                />
+                {p.label}
+                {disabled && <span className="text-xs text-slate-400">(not running)</span>}
+              </label>
+            );
+          })}
         </fieldset>
+
+        {provider === "ollama" && !ollamaAvailable && (
+          <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Ollama isn't running right now, so chat will fail until it is. Start it
+            with <code className="rounded bg-amber-100 px-1">make ollama-up</code> (see
+            infra/README.md) or pick another provider above.
+          </p>
+        )}
 
         {selected.needsKey && (
           <div className="space-y-2 border-t border-slate-100 pt-3">

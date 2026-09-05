@@ -81,6 +81,8 @@ spec:
               value: {{ .Values.backend.env.anthropicModel | quote }}
             - name: OPENAI_MODEL
               value: {{ .Values.backend.env.openaiModel | quote }}
+            - name: GROQ_MODEL
+              value: {{ .Values.backend.env.groqModel | quote }}
             - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -91,6 +93,11 @@ spec:
                 secretKeyRef:
                   name: {{ include "rag-chatbot.componentFullname" (list $ "secrets") }}
                   key: openai-api-key
+            - name: GROQ_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rag-chatbot.componentFullname" (list $ "secrets") }}
+                  key: groq-api-key
             - name: SECRET_ENCRYPTION_KEY
               valueFrom:
                 secretKeyRef:

@@ -44,6 +44,7 @@ backend:
     llmProvider: anthropic
     anthropicModel: claude-sonnet-5
     openaiModel: gpt-4o-mini
+    groqModel: openai/gpt-oss-120b
     corsAllowOrigins: '["http://rag-chatbot.local"]'
 
 frontend:
@@ -143,4 +144,5 @@ secrets:
   keycloakAdminPassword: "admin"
   anthropicApiKey: ""
   openaiApiKey: ""
+  groqApiKey: ""
   secretEncryptionKey: ""

@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-LLMProviderName = Literal["anthropic", "openai", "ollama"]
+LLMProviderName = Literal["anthropic", "openai", "groq", "ollama"]
 
 
 class LLMSettingsRead(BaseModel):
@@ -11,8 +11,14 @@ class LLMSettingsRead(BaseModel):
     provider: LLMProviderName
     has_anthropic_key: bool
     has_openai_key: bool
+    has_groq_key: bool
     anthropic_key_preview: str | None = None
     openai_key_preview: str | None = None
+    groq_key_preview: str | None = None
+    # Live-checked (see app/services/llm_provider.check_ollama_available) —
+    # Ollama is optional/resource-heavy (infra/Makefile's `ollama-up`), so the
+    # frontend greys the option out rather than let you pick a dead provider.
+    ollama_available: bool
 
 
 class LLMSettingsUpdate(BaseModel):

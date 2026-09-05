@@ -2,9 +2,9 @@
 
 Keeps the rest of the codebase (the RAG chain in Phase 4) talking to LangChain's
 provider-agnostic `BaseChatModel` interface, so switching between Anthropic,
-OpenAI, and Ollama is a one-line env var change (`LLM_PROVIDER`) rather than a
-code change. Ollama needs no API key, which makes it a convenient default while
-a real Anthropic/OpenAI key isn't set up yet — see infra/README.md.
+OpenAI, Groq, and Ollama is a one-line env var change (`LLM_PROVIDER`) rather
+than a code change. Ollama needs no API key, which makes it a convenient
+default while a real provider key isn't set up yet — see infra/README.md.
 
 `resolve_chat_model()` layers a *per-user* choice (Settings page, see
 app/api/v1/routers/llm_settings.py) on top of that env-var default: a user who
@@ -17,6 +17,7 @@ construction) and keeps a plaintext key's lifetime as short as possible.
 
 from functools import lru_cache
 
+import httpx
 from langchain_core.language_models import BaseChatModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,6 +58,21 @@ def _build_chat_model(settings: Settings) -> BaseChatModel:
         return ChatOpenAI(
             model=settings.openai_model,
             api_key=settings.openai_api_key,
+            temperature=settings.llm_temperature,
+            timeout=60,
+        )
+
+    if settings.llm_provider == "groq":
+        if not settings.groq_api_key:
+            raise LLMConfigurationError(
+                "LLM_PROVIDER=groq but GROQ_API_KEY is not set. "
+                "Set it in backend/.env or switch LLM_PROVIDER to another provider."
+            )
+        from langchain_groq import ChatGroq
+
+        return ChatGroq(
+            model=settings.groq_model,
+            api_key=settings.groq_api_key,
             temperature=settings.llm_temperature,
             timeout=60,
         )
@@ -114,7 +130,29 @@ async def resolve_chat_model(db: AsyncSession, owner_id: str) -> BaseChatModel:
                 "No OpenAI API key saved. Add one in Settings, or switch provider."
             )
         overrides["openai_api_key"] = decrypt_secret(user_row.encrypted_openai_key, base_settings)
+    elif user_row.provider == "groq":
+        if not user_row.encrypted_groq_key:
+            raise LLMConfigurationError(
+                "No Groq API key saved. Add one in Settings, or switch provider."
+            )
+        overrides["groq_api_key"] = decrypt_secret(user_row.encrypted_groq_key, base_settings)
     # "ollama" needs no key — the deployment-wide OLLAMA_BASE_URL/OLLAMA_MODEL
     # apply for every user (it's a shared local server, not a personal secret).
 
     return _build_chat_model(base_settings.model_copy(update=overrides))
+
+
+async def check_ollama_available(settings: Settings | None = None) -> bool:
+    """Live reachability check for the (optional, resource-heavy — see
+    infra/Makefile) local Ollama server, so the Settings UI can grey out that
+    option rather than let someone pick a provider that will just fail on the
+    first chat message. Short timeout: this runs on every Settings page load,
+    so a genuinely-down Ollama shouldn't make that page feel slow.
+    """
+    settings = settings or get_settings()
+    try:
+        async with httpx.AsyncClient(timeout=1.5) as client:
+            response = await client.get(f"{settings.ollama_base_url}/api/tags")
+            return response.status_code == 200
+    except httpx.HTTPError:
+        return False

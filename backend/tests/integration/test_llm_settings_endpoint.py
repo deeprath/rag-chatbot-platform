@@ -55,10 +55,14 @@ async def test_get_with_no_saved_settings_reports_the_deployment_default(
     resp = await client.get("/api/v1/settings/llm", headers=auth_headers("settings-user-1"))
     assert resp.status_code == 200
     body = resp.json()
-    assert body["provider"] in ("anthropic", "openai", "ollama")
+    assert body["provider"] in ("anthropic", "openai", "groq", "ollama")
     assert body["has_anthropic_key"] is False
     assert body["has_openai_key"] is False
+    assert body["has_groq_key"] is False
     assert body["anthropic_key_preview"] is None
+    # No real Ollama server in this test environment — reflects that honestly
+    # rather than assuming it's up (see check_ollama_available).
+    assert body["ollama_available"] is False
 
 
 async def test_selecting_a_key_provider_without_a_key_is_rejected(
@@ -73,16 +77,57 @@ async def test_selecting_a_key_provider_without_a_key_is_rejected(
     assert "Anthropic API key is required" in resp.json()["detail"]
 
 
-async def test_selecting_ollama_needs_no_key(client: AsyncClient, auth_headers) -> None:
+async def test_selecting_ollama_when_unreachable_is_rejected(
+    client: AsyncClient, auth_headers
+) -> None:
+    # No real Ollama server in this test environment — check_ollama_available
+    # correctly returns False, so this should be rejected rather than saved.
     resp = await client.put(
         "/api/v1/settings/llm",
         json={"provider": "ollama"},
         headers=auth_headers("settings-user-3"),
     )
+    assert resp.status_code == 422
+    assert "Ollama isn't reachable" in resp.json()["detail"]
+
+
+async def test_selecting_ollama_when_reachable_needs_no_key(
+    client: AsyncClient, auth_headers, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def fake_available(*_args: object, **_kwargs: object) -> bool:
+        return True
+
+    monkeypatch.setattr(llm_settings_router, "check_ollama_available", fake_available)
+
+    resp = await client.put(
+        "/api/v1/settings/llm",
+        json={"provider": "ollama"},
+        headers=auth_headers("settings-user-3b"),
+    )
     assert resp.status_code == 200
     body = resp.json()
     assert body["provider"] == "ollama"
     assert body["has_anthropic_key"] is False
+    assert body["ollama_available"] is True
+
+
+async def test_saving_a_groq_key_never_returns_it_but_persists_it_encrypted(
+    client: AsyncClient, auth_headers
+) -> None:
+    owner_id = "settings-user-groq"
+    plaintext_key = "gsk-totally-real-secret-value"
+
+    put_resp = await client.put(
+        "/api/v1/settings/llm",
+        json={"provider": "groq", "api_key": plaintext_key},
+        headers=auth_headers(owner_id),
+    )
+    assert put_resp.status_code == 200
+    body = put_resp.json()
+    assert body["has_groq_key"] is True
+    assert body["groq_key_preview"] is not None
+    assert plaintext_key not in put_resp.text
+    assert body["groq_key_preview"] != plaintext_key
 
 
 async def test_saving_a_key_never_returns_it_but_persists_it_encrypted(
@@ -123,8 +168,13 @@ async def test_saving_a_key_never_returns_it_but_persists_it_encrypted(
 
 
 async def test_switching_provider_and_back_reuses_the_previously_saved_key(
-    client: AsyncClient, auth_headers
+    client: AsyncClient, auth_headers, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    async def fake_available(*_args: object, **_kwargs: object) -> bool:
+        return True
+
+    monkeypatch.setattr(llm_settings_router, "check_ollama_available", fake_available)
+
     owner_id = "settings-user-5"
     headers = auth_headers(owner_id)
 

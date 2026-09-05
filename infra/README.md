@@ -5,10 +5,14 @@ the FastAPI backend, and the React frontend — with one command.
 
 ```bash
 cd infra
-cp .env.example .env      # fill in ANTHROPIC_API_KEY / OPENAI_API_KEY to actually chat
+cp .env.example .env      # fill in ANTHROPIC_API_KEY / OPENAI_API_KEY / GROQ_API_KEY to actually chat
 docker compose up -d
 docker compose ps          # wait until everything shows "healthy"
 ```
+
+Or, from the repo root, `cp infra/.env.example infra/.env` then `make up` — see the
+[root Makefile](../Makefile) (`make help` lists every target, including the
+Ollama ones below).
 
 | Service | URL | Notes |
 |---|---|---|
@@ -24,28 +28,39 @@ Migrations run automatically: `backend-migrate` is a one-shot service (`alembic
 upgrade head`) that the `backend` service waits on (`service_completed_successfully`)
 before starting.
 
-## Using Ollama (no API key needed)
+## LLM providers
 
-Don't have an `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` yet? `LLM_PROVIDER=ollama` runs
-a local open model instead — no key, no cost, works offline. The `ollama` service
-is behind a compose **profile** so it doesn't force a ~1GB+ model download on
-everyone who just wants to use a real API key:
+Four options (`LLM_PROVIDER` in `.env`, or per-user in the app's Settings
+page — see [`docs/SECURITY.md`](../docs/SECURITY.md) for how per-user keys are
+encrypted at rest): `anthropic`, `openai`, `groq` (all need an API key), and
+`ollama` (below — no key, but needs a local server running).
+
+## Using Ollama (no API key needed, optional)
+
+Don't have an API key yet? `LLM_PROVIDER=ollama` runs a local open model
+instead — no key, no cost, works offline. It's genuinely resource-heavy on a
+laptop (CPU-only inference — Docker Desktop doesn't pass through Apple
+Silicon/GPU acceleration — plus a ~1.3GB model download), so it's **off by
+default**, behind a compose profile, and controlled explicitly:
 
 ```bash
-cd infra
-# in .env: LLM_PROVIDER=ollama   (OLLAMA_MODEL defaults to llama3.2:1b)
-docker compose --profile ollama up -d --build
-docker compose --profile ollama run --rm ollama-pull   # first time only — pulls the model
+make ollama-up      # from the repo root — starts it and pulls the model (first time)
+make ollama-down    # stop it again when you don't need it, without touching the rest of the stack
 ```
 
-Responses are slower and lower-quality than Claude/GPT (small model, CPU-only —
-Docker Desktop doesn't pass through Apple Silicon/GPU acceleration), but it's a
-real, working LLM with no signup. Swap `OLLAMA_MODEL` for a bigger model
-(`llama3.2:3b`, `qwen2.5:7b`, ...) if your machine can take it — just re-run the
-`ollama-pull` command above after changing it. Switch back to a real provider
-any time by setting `LLM_PROVIDER=anthropic` (or `openai`) and restarting the
-`backend` service; the `ollama` containers can keep running idle or be stopped
-with `docker compose --profile ollama down`.
+(Equivalent raw compose commands, if you're not using `make`:
+`docker compose --profile ollama up -d --build` then
+`docker compose --profile ollama run --rm ollama-pull`.)
+
+Then either set `LLM_PROVIDER=ollama` in `.env` and `make restart-backend`, or
+pick "Ollama" in the app's Settings page — it's live-checked there and shown
+as unavailable/greyed out whenever the server isn't actually running, so you
+can't select a dead option by mistake.
+
+Responses are slower and lower-quality than a hosted model (small model,
+CPU-only), but it's a real, working LLM with no signup. Swap `OLLAMA_MODEL`
+for a bigger model (`llama3.2:3b`, `qwen2.5:7b`, ...) if your machine can take
+it — just re-run `make ollama-pull` after changing it.
 
 ## Things worth knowing if you touch this
 
@@ -76,3 +91,5 @@ with `docker compose --profile ollama down`.
 docker compose down          # stop + remove containers, keep volumes (data persists)
 docker compose down -v       # also wipe TimescaleDB/MinIO data
 ```
+
+(Or `make down` / `make down-v` from the repo root.)

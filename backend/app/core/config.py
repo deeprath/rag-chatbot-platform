@@ -54,13 +54,18 @@ class Settings(BaseSettings):
     keycloak_issuer_url: str | None = None
 
     # --- LLM provider ---
-    llm_provider: Literal["anthropic", "openai", "ollama"] = "anthropic"
+    llm_provider: Literal["anthropic", "openai", "groq", "ollama"] = "anthropic"
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-5"
     openai_api_key: str | None = None
     openai_model: str = "gpt-4o-mini"
+    groq_api_key: str | None = None
+    groq_model: str = "openai/gpt-oss-120b"
     # Ollama needs no API key — a local/self-hosted model server, useful as a
-    # free stand-in while ANTHROPIC_API_KEY/OPENAI_API_KEY aren't set up yet.
+    # free stand-in while a real provider key isn't set up yet. Optional and
+    # resource-heavy (see infra/Makefile's `ollama-up`) — its reachability is
+    # checked live (see llm_provider.check_ollama_available) so the frontend
+    # can grey it out rather than let you pick a dead option.
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.2:1b"
     llm_temperature: float = 0.2

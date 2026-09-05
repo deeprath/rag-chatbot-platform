@@ -144,12 +144,20 @@ don't just configure it" treatment as everything else here:
   offering to autofill it from an unrelated saved credential), is never
   pre-filled with a real value, and is cleared from component state
   immediately after a successful save.
-- **Switching providers doesn't demand re-entering a key.** Anthropic and
-  OpenAI keys are stored in separate columns; toggling `provider` back and
-  forth reuses whichever key was last saved for that provider rather than
-  silently discarding it — but a key is required the *first* time a
-  key-based provider is selected (`422` otherwise), and `clear_api_key`
-  removes one explicitly.
+- **Switching providers doesn't demand re-entering a key.** Anthropic,
+  OpenAI, and Groq keys are stored in separate columns; toggling `provider`
+  back and forth reuses whichever key was last saved for that provider
+  rather than silently discarding it — but a key is required the *first*
+  time a key-based provider is selected (`422` otherwise), and
+  `clear_api_key` removes one explicitly.
+- **Ollama can't be selected when it isn't actually reachable.** Unlike a
+  missing API key (fixable right there in the form), a down local server
+  isn't — so `PUT /settings/llm` live-checks it
+  (`app/services/llm_provider.check_ollama_available`, 1.5s timeout) and
+  rejects the selection with a clear next step (`make ollama-up`) rather than
+  saving a choice that would just fail on the next chat message. The same
+  check backs `ollama_available` on `GET`, which the frontend uses to grey
+  the option out before you even try.
 
 ## SonarQube
 
