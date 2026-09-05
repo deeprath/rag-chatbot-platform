@@ -5,7 +5,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from jose import jwt
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.security import AuthenticationError, decode_token
 
 pytestmark = pytest.mark.asyncio
@@ -31,9 +31,17 @@ async def test_wrong_issuer_is_rejected(make_access_token) -> None:
 
 
 async def test_wrong_audience_is_rejected(make_access_token) -> None:
+    # `decode_token` only checks `aud` at all when `keycloak_audience` is set
+    # (see its `verify_aud` line) — the ambient `get_settings()` singleton
+    # that `make_access_token`/`decode_token` fall back to by default may or
+    # may not have one configured (e.g. unset in CI, where there's no
+    # backend/.env), which would make this test's pass/fail depend on where
+    # it runs rather than on the actual behavior it's meant to check. Passing
+    # an explicit `Settings` with a fixed audience makes it deterministic.
+    settings = Settings(_env_file=None, keycloak_audience="expected-client")  # type: ignore[call-arg]
     token = make_access_token(aud="some-other-client")
     with pytest.raises(AuthenticationError):
-        await decode_token(token)
+        await decode_token(token, settings)
 
 
 async def test_token_signed_by_unknown_key_is_rejected(make_access_token) -> None:

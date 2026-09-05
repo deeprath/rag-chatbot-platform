@@ -55,9 +55,14 @@ jobs:
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
+      # Deliberately `npm install`, not `npm ci`: npm/cli#4828 means a
+      # lockfile committed from one platform (ours: macOS) can make `npm ci`
+      # fail to resolve optional native deps (Rollup's platform binary) on a
+      # different platform (this Linux runner) — see frontend/Dockerfile's
+      # identical workaround/comment for the same underlying bug.
       - name: Install dependencies
         working-directory: frontend
-        run: npm ci
+        run: npm install
 
       - name: eslint
         working-directory: frontend

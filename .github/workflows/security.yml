@@ -32,7 +32,7 @@ jobs:
       # ourselves — see .trivyignore for the one deliberate, justified
       # exception (CVE-2024-23342 / ecdsa, unreachable given how we use
       # python-jose — see the file for the full reasoning).
-      - uses: aquasecurity/trivy-action@0.28.0
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -51,7 +51,7 @@ jobs:
       # forced to run read-only/non-root) — see docs/SECURITY.md and
       # infra/helm/templates/_helpers.tpl's restrictedContainerSecurityContext
       # comment for the reasoning. Still runs and is visible on every PR.
-      - uses: aquasecurity/trivy-action@0.28.0
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: config
           scan-ref: .
@@ -73,7 +73,7 @@ jobs:
       # Fails the build: our own application dependencies (Python/npm
       # packages), which we can fix immediately by bumping a lockfile.
       - name: Scan application dependencies
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: rag-chatbot-${{ matrix.component }}:scan
           scanners: vuln
@@ -85,7 +85,7 @@ jobs:
       # Informational: base OS image packages move on their own upstream
       # patch cadence, independent of our commits — see docs/SECURITY.md.
       - name: Scan full image (incl. OS packages, informational)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: rag-chatbot-${{ matrix.component }}:scan
           scanners: vuln
@@ -119,10 +119,13 @@ jobs:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
+      # npm install, not npm ci — see .github/workflows/ci.yml's identical
+      # comment (npm/cli#4828: a macOS-committed lockfile breaks npm ci's
+      # optional native-dep resolution on this Linux runner).
       - name: Frontend coverage
         working-directory: frontend
         run: |
-          npm ci
+          npm install
           npm run test:coverage
 
       - uses: SonarSource/sonarqube-scan-action@v4
