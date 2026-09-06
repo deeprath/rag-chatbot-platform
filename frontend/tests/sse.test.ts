@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { keycloak } from "../src/auth/keycloak";
+
 vi.mock("../src/auth/keycloak", () => ({
   keycloak: {
     token: "fake-token",
     updateToken: vi.fn().mockResolvedValue(false),
+    login: vi.fn(),
   },
 }));
 
@@ -131,6 +134,44 @@ describe("streamChat", () => {
       },
     });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(stream, { status: 200 })));
+
+    const onError = vi.fn();
+    const onDone = vi.fn();
+    await streamChat({ message: "hi" }, { onError, onDone });
+
+    expect(onError).not.toHaveBeenCalled();
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it("logs in via keycloak.login() when the token refresh fails, without ever fetching", async () => {
+    vi.mocked(keycloak.updateToken).mockRejectedValueOnce(new Error("token expired"));
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const onError = vi.fn();
+    await streamChat({ message: "hi" }, { onError });
+
+    expect(keycloak.login).toHaveBeenCalledOnce();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a network-level fetch failure (not an abort) via onError", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+
+    const onError = vi.fn();
+    const onDone = vi.fn();
+    await streamChat({ message: "hi" }, { onError, onDone });
+
+    expect(onError).toHaveBeenCalledWith("Could not reach the server.");
+    expect(onDone).not.toHaveBeenCalled(); // the stream never started — nothing to signal "done" on
+  });
+
+  it("a deliberate abort during fetch() itself (before any response) is silent", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new DOMException("The operation was aborted.", "AbortError")),
+    );
 
     const onError = vi.fn();
     const onDone = vi.fn();

@@ -20,7 +20,7 @@ export async function streamChat(
   signal?: AbortSignal,
 ): Promise<void> {
   const response = await fetchChatStream(request, callbacks, signal);
-  if (!response || !response.body) return; // already handled (onError called, or a deliberate abort)
+  if (!response?.body) return; // already handled (onError called, or a deliberate abort)
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
