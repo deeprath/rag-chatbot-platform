@@ -164,10 +164,18 @@ jobs:
           done
           docker compose ps
 
+      # No FRONTEND_URL/API_URL override here — the script's own defaults
+      # (http://host.docker.internal:...) are exactly right for this case:
+      # ZAP runs *inside its own container*, not on the runner directly, so
+      # "localhost" from ZAP's point of view is that container, not the
+      # runner's network where docker-compose actually published these
+      # ports. An earlier version of this step forced both to
+      # `http://localhost:...`, which silently broke every scan
+      # ("Connection refused" from inside the ZAP container, on every run
+      # since this job was written — `|| true` in zap-scan.sh swallowed the
+      # failure, and upload-artifact "succeeded" by uploading nothing).
       - name: Run ZAP scans
-        run: |
-          FRONTEND_URL=http://localhost:5173 API_URL=http://localhost:8000 \
-            ./infra/security/zap-scan.sh
+        run: ./infra/security/zap-scan.sh
 
       - uses: actions/upload-artifact@v7.0.1
         if: always()
@@ -175,6 +183,10 @@ jobs:
           name: zap-reports
           path: infra/security/reports/
           retention-days: 30
+          # Catches this exact failure mode loudly instead of silently
+          # succeeding with an empty artifact, the way the broken URLs above
+          # did for every run of this job until actually verified end-to-end.
+          if-no-files-found: error
 
       - name: Tear down
         if: always()
