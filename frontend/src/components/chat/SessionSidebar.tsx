@@ -10,10 +10,10 @@ function formatSessionLabel(session: ChatSessionRead): string {
 }
 
 interface SessionSidebarProps {
-  sessions: ChatSessionRead[];
-  selectedSessionId: string | null;
-  onSelect: (sessionId: string) => void;
-  onNewChat: () => void;
+  readonly sessions: ChatSessionRead[];
+  readonly selectedSessionId: string | null;
+  readonly onSelect: (sessionId: string) => void;
+  readonly onNewChat: () => void;
 }
 
 export function SessionSidebar({

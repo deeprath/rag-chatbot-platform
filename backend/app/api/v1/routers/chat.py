@@ -54,7 +54,7 @@ async def chat(
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
-@router.get("/sessions", response_model=list[ChatSessionRead])
+@router.get("/sessions")
 async def list_sessions(
     owner_id: str = Depends(get_current_owner_id),
     db: AsyncSession = Depends(get_db),
@@ -63,7 +63,7 @@ async def list_sessions(
     return [ChatSessionRead.model_validate(s) for s in sessions]
 
 
-@router.get("/sessions/{session_id}/messages", response_model=list[ChatMessageRead])
+@router.get("/sessions/{session_id}/messages")
 async def get_session_messages(
     session_id: uuid.UUID,
     owner_id: str = Depends(get_current_owner_id),

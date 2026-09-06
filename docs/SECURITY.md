@@ -172,20 +172,38 @@ than being skipped.
 
 **Real result, first live scan**: Quality Gate A across the board — 0 bugs,
 0 vulnerabilities, 0 security hotspots, 0% duplication, 70.5% coverage. 26
-code smells, none security- or correctness-related, clustered as:
-- FastAPI routes with a `response_model=` that's redundant with the
-  handler's own return-type annotation (`chat.py`, `documents.py`,
-  `llm_settings.py`)
-- React components whose props type isn't `Readonly<...>`
-- A few nested ternaries worth extracting (`VoiceConversationOverlay.tsx`,
-  `MessageBubble.tsx`)
-- Helm templates missing a storage `request` or pinning `:latest` instead of
-  a real tag (`infra/helm/templates/**/deployment.yaml`)
-- One over-broad test assertion, one cognitive-complexity function
-  (`api/sse.ts`), one stray `TODO`, a couple of minor style rules
+code smells, none security- or correctness-related — since none of these
+gate anything, all 26 were cleaned up rather than left as backlog:
+- FastAPI routes' redundant `response_model=` (duplicated the handler's own
+  return-type annotation) removed — confirmed via `app.openapi()` that the
+  generated schema is byte-for-byte identical, since FastAPI infers
+  `response_model` from the return type either way; `speech.py`'s two
+  dependencies moved to `Annotated[...]` style.
+- Every React component prop `interface` marked `Readonly<...>`; the
+  handful of nested ternaries (`VoiceConversationOverlay.tsx`,
+  `MessageBubble.tsx`) extracted into small named functions/lookup tables
+  instead, which reads better than the ternary ever did.
+- `api/sse.ts`'s `streamChat` (cognitive complexity 16, one over the limit)
+  split into three functions along its natural seams — token refresh +
+  fetch, frame-buffering, frame-parsing — each simple on its own.
+- The two false positives (a comment describing *trivy-action's own*
+  unfinished rename, not a TODO of ours; a `Blob#text()` polyfill that by
+  definition can't call the method it's implementing) reworded/annotated
+  rather than "fixed" into something misleading.
+- Helm: every container now requests `ephemeral-storage` alongside cpu/
+  memory; `latest` replaced with real pinned tags — `26.7.3`
+  (Keycloak) and a dated MinIO release verified against each registry's own
+  API at fix time, `0.1.0` (this app's own version, `Chart.yaml`'s
+  `appVersion`) for the locally-built backend/frontend images, with
+  `infra/helm/README.md`'s build commands updated to match so the
+  documented local-`kind` flow still actually works.
+- `tests/conftest.py`'s no-op fixture `yield` removed; the overly-broad
+  `pytest.raises(Exception)` in `test_storage_service.py` narrowed to the
+  real exception MinIO raises (`minio.error.S3Error`, message `NoSuchKey`)
+  — verified against a real MinIO container, not assumed.
 
-None of these gate anything — logged here as the known, low-priority
-maintainability backlog SonarCloud found, not fixed as part of connecting it.
+Backend (71 tests), frontend (68 tests), `ruff`/`eslint`/`tsc`, and
+`helm lint`/`helm template` all still pass after the cleanup.
 
 ## Voice chat
 

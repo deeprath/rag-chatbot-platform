@@ -18,7 +18,7 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB
 
 
-@router.post("", response_model=DocumentRead, status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED)
 async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile,
@@ -58,7 +58,7 @@ async def upload_document(
     return DocumentRead.model_validate(document)
 
 
-@router.get("", response_model=list[DocumentRead])
+@router.get("")
 async def list_documents(
     owner_id: str = Depends(get_current_owner_id),
     db: AsyncSession = Depends(get_db),
@@ -67,7 +67,7 @@ async def list_documents(
     return [DocumentRead.model_validate(doc) for doc in documents]
 
 
-@router.get("/{document_id}", response_model=DocumentRead)
+@router.get("/{document_id}")
 async def get_document(
     document_id: uuid.UUID,
     owner_id: str = Depends(get_current_owner_id),

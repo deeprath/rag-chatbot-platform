@@ -13,7 +13,9 @@ if (typeof Blob !== "undefined" && !Blob.prototype.text) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(reader.error);
+      reader.onerror = () => reject(reader.error ?? new Error("Failed to read blob"));
+      // NOSONAR(typescript:S7756): this *is* the Blob#text() polyfill (jsdom
+      // lacks it) — it can't call the method it's implementing.
       reader.readAsText(this);
     });
   };

@@ -58,7 +58,7 @@ async def _to_read_model(row: UserLLMSettings | None) -> LLMSettingsRead:
     )
 
 
-@router.get("", response_model=LLMSettingsRead)
+@router.get("")
 async def get_llm_settings(
     owner_id: str = Depends(get_current_owner_id),
     db: AsyncSession = Depends(get_db),
@@ -66,7 +66,7 @@ async def get_llm_settings(
     return await _to_read_model(await llm_settings_repository.get_settings(db, owner_id))
 
 
-@router.put("", response_model=LLMSettingsRead)
+@router.put("")
 async def update_llm_settings(
     payload: LLMSettingsUpdate,
     owner_id: str = Depends(get_current_owner_id),

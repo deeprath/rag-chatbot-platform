@@ -7,7 +7,7 @@ import { AuthContext, type AuthContextValue } from "./useAuth";
  * Bootstraps Keycloak (Authorization Code + PKCE), keeps the access token fresh,
  * and exposes auth state to the rest of the app via useAuth().
  */
-export function AuthProvider({ children }: PropsWithChildren) {
+export function AuthProvider({ children }: Readonly<PropsWithChildren>) {
   const [authenticated, setAuthenticated] = useState(false);
   const [initializing, setInitializing] = useState(true);
   const [token, setToken] = useState<string | undefined>(undefined);

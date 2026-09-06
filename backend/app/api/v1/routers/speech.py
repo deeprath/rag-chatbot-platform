@@ -3,6 +3,8 @@ app/services/tts_service.py for the full picture, including the one-time
 Groq-console setup step this needs before it actually works.
 """
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,8 +26,8 @@ router = APIRouter(prefix="/speech", tags=["speech"])
 @router.post("/tts")
 async def text_to_speech(
     payload: TTSRequest,
-    owner_id: str = Depends(get_current_owner_id),
-    db: AsyncSession = Depends(get_db),
+    owner_id: Annotated[str, Depends(get_current_owner_id)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     api_key = await resolve_groq_api_key(db, owner_id)
     try:

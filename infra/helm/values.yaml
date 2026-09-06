@@ -24,13 +24,18 @@ ingress:
 backend:
   image:
     repository: rag-chatbot-backend
-    tag: latest
+    # Built locally (no registry push pipeline yet — see infra/README.md), so
+    # this tracks the app's own version (Chart.yaml's appVersion, same as
+    # backend/pyproject.toml) rather than a registry tag; retag/rebuild when
+    # that version bumps.
+    tag: "0.1.0"
   replicaCount: 1
   containerPort: 8000
   resources:
     requests:
       cpu: 100m
       memory: 256Mi
+      ephemeral-storage: 512Mi
     limits:
       memory: 1Gi
   autoscaling:
@@ -50,13 +55,15 @@ backend:
 frontend:
   image:
     repository: rag-chatbot-frontend
-    tag: latest
+    # See backend.image.tag's comment — same reasoning, same version.
+    tag: "0.1.0"
   replicaCount: 1
   containerPort: 8080
   resources:
     requests:
       cpu: 50m
       memory: 64Mi
+      ephemeral-storage: 128Mi
     limits:
       memory: 128Mi
   autoscaling:
@@ -77,6 +84,7 @@ kong:
     requests:
       cpu: 50m
       memory: 128Mi
+      ephemeral-storage: 256Mi
     limits:
       memory: 384Mi
 
@@ -91,6 +99,7 @@ timescaledb:
     requests:
       cpu: 100m
       memory: 256Mi
+      ephemeral-storage: 512Mi
     limits:
       memory: 1Gi
   database: rag_chatbot
@@ -99,7 +108,9 @@ timescaledb:
 minio:
   image:
     repository: minio/minio
-    tag: latest
+    # Real current release tag (minio/minio has no floating "stable" tag
+    # beyond "latest") — see https://hub.docker.com/r/minio/minio/tags.
+    tag: "RELEASE.2025-09-07T16-13-09Z"
   storage:
     size: 2Gi
     storageClassName: ""
@@ -107,6 +118,7 @@ minio:
     requests:
       cpu: 50m
       memory: 128Mi
+      ephemeral-storage: 256Mi
     limits:
       memory: 512Mi
   bucket: documents
@@ -114,11 +126,12 @@ minio:
 keycloak:
   image:
     repository: quay.io/keycloak/keycloak
-    tag: latest
+    tag: "26.7.3"
   resources:
     requests:
       cpu: 100m
       memory: 512Mi
+      ephemeral-storage: 512Mi
     limits:
       memory: 1Gi
   realm: rag-chatbot

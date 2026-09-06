@@ -67,7 +67,7 @@ export function VoiceSettings() {
             name="voice-mode"
             checked={voiceMode === "browser"}
             onChange={() => setVoiceMode("browser")}
-          />
+          />{" "}
           Standard (device voice)
         </label>
       </fieldset>
@@ -77,7 +77,7 @@ export function VoiceSettings() {
           type="checkbox"
           checked={autoSpeak}
           onChange={(e) => setAutoSpeak(e.target.checked)}
-        />
+        />{" "}
         Read assistant replies aloud automatically
       </label>
     </div>

@@ -11,6 +11,7 @@ from collections.abc import Iterator
 import httpx
 import pytest
 from minio import Minio
+from minio.error import S3Error
 from testcontainers.community.minio import MinioContainer
 
 from app.services import storage_service
@@ -61,7 +62,7 @@ async def test_delete_object_removes_it() -> None:
 
     storage_service.delete_object(key)
 
-    with pytest.raises(Exception):  # noqa: B017 - minio raises its own S3Error subclass
+    with pytest.raises(S3Error, match="NoSuchKey"):
         storage_service.download_bytes(key)
 
 

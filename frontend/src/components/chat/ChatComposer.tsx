@@ -3,8 +3,8 @@ import { useState } from "react";
 import { useSpeechRecognition } from "../../hooks/useSpeechRecognition";
 
 interface ChatComposerProps {
-  disabled: boolean;
-  onSend: (message: string) => void;
+  readonly disabled: boolean;
+  readonly onSend: (message: string) => void;
 }
 
 export function ChatComposer({ disabled, onSend }: ChatComposerProps) {

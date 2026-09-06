@@ -19,38 +19,11 @@ export async function streamChat(
   callbacks: StreamChatCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {
-  try {
-    await keycloak.updateToken(30);
-  } catch {
-    keycloak.login();
-    return;
-  }
-
-  let response: Response;
-  try {
-    response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/chat`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${keycloak.token}`,
-      },
-      body: JSON.stringify({ session_id: request.sessionId ?? null, message: request.message }),
-      signal,
-    });
-  } catch (err) {
-    if ((err as Error).name === "AbortError") return;
-    callbacks.onError?.("Could not reach the server.");
-    return;
-  }
-
-  if (!response.ok || !response.body) {
-    callbacks.onError?.(`Request failed (HTTP ${response.status})`);
-    return;
-  }
+  const response = await fetchChatStream(request, callbacks, signal);
+  if (!response || !response.body) return; // already handled (onError called, or a deliberate abort)
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let buffer = "";
   // Set once an "error" or "done" SSE frame is actually parsed — lets the code
   // below tell "the stream ended because the server said so" apart from "the
   // stream ended/broke for some other reason" (e.g. a proxy or network layer
@@ -67,18 +40,7 @@ export async function streamChat(
   }
 
   try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      let separatorIndex = buffer.indexOf("\n\n");
-      while (separatorIndex !== -1) {
-        handleFrame(buffer.slice(0, separatorIndex));
-        buffer = buffer.slice(separatorIndex + 2);
-        separatorIndex = buffer.indexOf("\n\n");
-      }
-    }
+    await consumeFrames(reader, decoder, handleFrame);
   } catch (err) {
     if ((err as Error).name === "AbortError") return; // caller already reset its own state
     if (!terminated) {
@@ -91,6 +53,72 @@ export async function streamChat(
   if (!terminated) {
     callbacks.onError?.("The response ended unexpectedly. Please try again.");
     callbacks.onDone?.();
+  }
+}
+
+/** Refreshes the auth token and opens the POST request, calling `onError` (or
+ * `keycloak.login()`) and returning `null` itself on any failure — so
+ * `streamChat` only has to check for `null` once, instead of threading three
+ * separate try/catch blocks through its own body. */
+async function fetchChatStream(
+  request: { sessionId?: string; message: string },
+  callbacks: StreamChatCallbacks,
+  signal?: AbortSignal,
+): Promise<Response | null> {
+  try {
+    await keycloak.updateToken(30);
+  } catch {
+    keycloak.login();
+    return null;
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${keycloak.token}`,
+      },
+      body: JSON.stringify({ session_id: request.sessionId ?? null, message: request.message }),
+      signal,
+    });
+  } catch (err) {
+    if ((err as Error).name === "AbortError") return null;
+    callbacks.onError?.("Could not reach the server.");
+    return null;
+  }
+
+  if (!response.ok || !response.body) {
+    callbacks.onError?.(`Request failed (HTTP ${response.status})`);
+    return null;
+  }
+
+  return response;
+}
+
+/** Reads the response body until it's exhausted, splitting it on the SSE
+ * frame separator ("\n\n") and handing each complete frame to `handleFrame`
+ * as soon as it arrives — a chunk from `reader.read()` can contain zero,
+ * one, or several complete frames plus a partial one, hence the inner loop
+ * draining as many as are currently buffered. */
+async function consumeFrames(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  decoder: TextDecoder,
+  handleFrame: (rawEvent: string) => void,
+): Promise<void> {
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let separatorIndex = buffer.indexOf("\n\n");
+    while (separatorIndex !== -1) {
+      handleFrame(buffer.slice(0, separatorIndex));
+      buffer = buffer.slice(separatorIndex + 2);
+      separatorIndex = buffer.indexOf("\n\n");
+    }
   }
 }
 

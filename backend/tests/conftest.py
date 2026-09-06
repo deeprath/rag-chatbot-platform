@@ -6,7 +6,6 @@ suite fast and hermetic.)
 """
 
 import time
-from collections.abc import Iterator
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -41,7 +40,7 @@ def _test_keypair() -> tuple[bytes, bytes]:
 @pytest.fixture(autouse=True)
 def _stub_keycloak_jwks(
     _test_keypair: tuple[bytes, bytes], monkeypatch: pytest.MonkeyPatch
-) -> Iterator[None]:
+) -> None:
     _private_pem, public_pem = _test_keypair
     test_jwk = jwk.construct(public_pem, algorithm="RS256").to_dict()
     test_jwk["kid"] = _KID
@@ -52,7 +51,6 @@ def _stub_keycloak_jwks(
         return jwks
 
     monkeypatch.setattr(security_module, "fetch_jwks", fake_fetch_jwks)
-    yield
 
 
 @pytest.fixture

@@ -16,16 +16,21 @@ kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main
 kubectl wait --namespace ingress-nginx --for=condition=ready pod \
   --selector=app.kubernetes.io/component=controller --timeout=180s
 
-# 2. Build images and load them into the cluster (no registry needed for local dev)
-docker build -t rag-chatbot-backend:latest backend/
-docker build -t rag-chatbot-backend-migrate:latest backend/   # same image; the Job overrides the command
+# 2. Build images and load them into the cluster (no registry needed for local
+#    dev) — tagged 0.1.0 to match values.yaml's default backend/frontend
+#    image.tag (Chart.yaml's appVersion; a floating "latest" tag is what
+#    SonarQube's kubernetes:S6596 rule flags on the *Deployment* spec, so the
+#    default there is a real, deliberately-bumped version instead). Retag
+#    both if you bump the app's own version.
+docker build -t rag-chatbot-backend:0.1.0 backend/
+docker build -t rag-chatbot-backend-migrate:0.1.0 backend/   # same image; the Job overrides the command
 docker build \
   --build-arg VITE_API_BASE_URL=http://rag-chatbot.local/api/v1 \
   --build-arg VITE_KEYCLOAK_URL=http://keycloak.rag-chatbot.local \
   --build-arg VITE_KEYCLOAK_REALM=rag-chatbot \
   --build-arg VITE_KEYCLOAK_CLIENT_ID=rag-chatbot-frontend \
-  -t rag-chatbot-frontend:latest frontend/
-kind load docker-image rag-chatbot-backend:latest rag-chatbot-backend-migrate:latest rag-chatbot-frontend:latest --name rag-chatbot
+  -t rag-chatbot-frontend:0.1.0 frontend/
+kind load docker-image rag-chatbot-backend:0.1.0 rag-chatbot-backend-migrate:0.1.0 rag-chatbot-frontend:0.1.0 --name rag-chatbot
 
 # 3. Install
 cd infra/helm

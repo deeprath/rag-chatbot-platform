@@ -4,8 +4,8 @@ const ACCEPTED_TYPES =
   ".pdf,.docx,.txt,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 interface UploadButtonProps {
-  uploading: boolean;
-  onSelect: (file: File) => void;
+  readonly uploading: boolean;
+  readonly onSelect: (file: File) => void;
 }
 
 export function UploadButton({ uploading, onSelect }: UploadButtonProps) {

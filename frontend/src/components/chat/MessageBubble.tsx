@@ -2,9 +2,19 @@ import type { MessageRole } from "../../api/types";
 import { useVoiceOutput } from "../../hooks/useVoiceOutput";
 
 interface MessageBubbleProps {
-  role: MessageRole;
-  content: string;
-  pending?: boolean;
+  readonly role: MessageRole;
+  readonly content: string;
+  readonly pending?: boolean;
+}
+
+/** ⏳ while a fetch for AI-voice audio is in flight, ⏹️ once it's (or the
+ * device voice is) actually playing, otherwise the idle 🔊 read-aloud icon —
+ * a small function rather than a nested ternary so each state reads as its
+ * own case. */
+function readAloudIcon(isLoading: boolean, isSpeaking: boolean): string {
+  if (isLoading) return "⏳";
+  if (isSpeaking) return "⏹️";
+  return "🔊";
 }
 
 export function MessageBubble({ role, content, pending }: MessageBubbleProps) {
@@ -38,7 +48,7 @@ export function MessageBubble({ role, content, pending }: MessageBubbleProps) {
               isSpeaking ? "text-slate-900 opacity-100" : "text-slate-400 hover:text-slate-600"
             }`}
           >
-            {isLoading ? "⏳" : isSpeaking ? "⏹️" : "🔊"}
+            {readAloudIcon(isLoading, isSpeaking)}
           </button>
         )}
       </div>

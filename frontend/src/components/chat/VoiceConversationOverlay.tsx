@@ -1,10 +1,10 @@
 import type { ConversationPhase } from "../../hooks/useVoiceConversation";
 
 interface VoiceConversationOverlayProps {
-  phase: ConversationPhase;
-  error: string | null;
-  lastTranscript: string | null;
-  onStop: () => void;
+  readonly phase: ConversationPhase;
+  readonly error: string | null;
+  readonly lastTranscript: string | null;
+  readonly onStop: () => void;
 }
 
 const PHASE_TEXT: Record<ConversationPhase, string> = {
@@ -14,7 +14,47 @@ const PHASE_TEXT: Record<ConversationPhase, string> = {
   speaking: "Speaking…",
 };
 
+const ORB_COLOR: Record<ConversationPhase, string> = {
+  idle: "bg-gradient-to-br from-indigo-400 to-indigo-600 shadow-indigo-500/50",
+  listening: "bg-gradient-to-br from-indigo-400 to-indigo-600 shadow-indigo-500/50",
+  thinking: "bg-gradient-to-br from-slate-600 to-slate-800 shadow-slate-700/50",
+  speaking: "bg-gradient-to-br from-fuchsia-500 to-indigo-500 shadow-fuchsia-500/50",
+};
+
 const BAR_HEIGHTS = [14, 26, 34, 22, 30, 16];
+
+/** The orb's center content for a given phase — a function rather than a
+ * nested ternary (equalizer bars / thinking dots / idle mic, three distinct
+ * JSX shapes, not just three strings) so each branch reads as its own case. */
+function renderOrbContent(phase: ConversationPhase) {
+  if (phase === "speaking") {
+    return (
+      <div className="flex h-9 items-center gap-1.5">
+        {BAR_HEIGHTS.map((height, i) => (
+          <span
+            key={i}
+            className="w-2 origin-center rounded-full bg-white/90 animate-voice-bar"
+            style={{ height, animationDelay: `${i * 0.11}s` }}
+          />
+        ))}
+      </div>
+    );
+  }
+  if (phase === "thinking") {
+    return (
+      <div className="flex gap-2">
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className="h-3 w-3 rounded-full bg-white/85 animate-voice-dot"
+            style={{ animationDelay: `${i * 0.15}s` }}
+          />
+        ))}
+      </div>
+    );
+  }
+  return <span className="text-5xl">🎙️</span>;
+}
 
 /**
  * Full-screen takeover shown while a voice conversation (useVoiceConversation)
@@ -33,8 +73,6 @@ export function VoiceConversationOverlay({
   onStop,
 }: VoiceConversationOverlayProps) {
   const isListening = phase === "listening";
-  const isThinking = phase === "thinking";
-  const isSpeaking = phase === "speaking";
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/97 backdrop-blur-sm">
@@ -67,37 +105,9 @@ export function VoiceConversationOverlay({
 
         {/* Core orb */}
         <div
-          className={`relative flex h-36 w-36 items-center justify-center rounded-full shadow-[0_0_60px_-10px] transition-colors duration-500 ${
-            isSpeaking
-              ? "bg-gradient-to-br from-fuchsia-500 to-indigo-500 shadow-fuchsia-500/50"
-              : isThinking
-                ? "bg-gradient-to-br from-slate-600 to-slate-800 shadow-slate-700/50"
-                : "bg-gradient-to-br from-indigo-400 to-indigo-600 shadow-indigo-500/50"
-          } ${isListening ? "animate-voice-breathe" : ""}`}
+          className={`relative flex h-36 w-36 items-center justify-center rounded-full shadow-[0_0_60px_-10px] transition-colors duration-500 ${ORB_COLOR[phase]} ${isListening ? "animate-voice-breathe" : ""}`}
         >
-          {isSpeaking ? (
-            <div className="flex h-9 items-center gap-1.5">
-              {BAR_HEIGHTS.map((height, i) => (
-                <span
-                  key={i}
-                  className="w-2 origin-center rounded-full bg-white/90 animate-voice-bar"
-                  style={{ height, animationDelay: `${i * 0.11}s` }}
-                />
-              ))}
-            </div>
-          ) : isThinking ? (
-            <div className="flex gap-2">
-              {[0, 1, 2].map((i) => (
-                <span
-                  key={i}
-                  className="h-3 w-3 rounded-full bg-white/85 animate-voice-dot"
-                  style={{ animationDelay: `${i * 0.15}s` }}
-                />
-              ))}
-            </div>
-          ) : (
-            <span className="text-5xl">🎙️</span>
-          )}
+          {renderOrbContent(phase)}
         </div>
       </div>
 

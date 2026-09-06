@@ -6,7 +6,7 @@ import { ChatPage } from "./pages/ChatPage";
 import { DocumentsPage } from "./pages/DocumentsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
-function LoginGate({ children }: { children: React.ReactNode }) {
+function LoginGate({ children }: { readonly children: React.ReactNode }) {
   const { authenticated, initializing, login } = useAuth();
 
   if (initializing) {

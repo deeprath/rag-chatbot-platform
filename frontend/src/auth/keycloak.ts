@@ -17,8 +17,6 @@ export const keycloak = new Keycloak({
 let initPromise: ReturnType<Keycloak["init"]> | null = null;
 
 export function initKeycloakOnce(options: Parameters<Keycloak["init"]>[0]) {
-  if (!initPromise) {
-    initPromise = keycloak.init(options);
-  }
+  initPromise ??= keycloak.init(options);
   return initPromise;
 }
