@@ -26,6 +26,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPORT_DIR="$SCRIPT_DIR/reports"
 mkdir -p "$REPORT_DIR"
+# The zaproxy image runs its scans as a non-root, non-host UID; writing its
+# report files into this bind mount otherwise fails with EACCES since the
+# directory is owned by whatever host user created it (confirmed for real in
+# CI: `PermissionError: [Errno 13] Permission denied: '/zap/wrk/*.html'`,
+# with the scan itself having run fine — this only broke report generation).
+chmod 777 "$REPORT_DIR"
 
 ZAP_IMAGE="ghcr.io/zaproxy/zaproxy:stable"
 FRONTEND_URL="${FRONTEND_URL:-http://host.docker.internal:5173}"
