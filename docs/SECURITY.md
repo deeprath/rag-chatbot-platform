@@ -108,6 +108,40 @@ deliberate, documented choice (`style-src 'unsafe-inline'`, needed for
 Tailwind/React's inline styles) — everything else is purely informational
 (ZAP noting it detected an SPA, cache-control observations) or noise inherent
 to any bundled JS file (numbers that incidentally look like Unix timestamps).
+This was originally found and fixed via manual local runs (`docker compose up
+-d && ./infra/security/zap-scan.sh`) — see below for the CI automation itself.
+
+**The `zap` CI job had never actually run a real scan, ever**, until manually
+triggered (`workflow_dispatch`) to verify it the same way SonarQube was —
+it's schedule/dispatch-only, and no scheduled run had fired yet, so this had
+never been exercised end-to-end despite being "configured" since Phase 9/10.
+Two real bugs surfaced, one per attempt:
+1. The step force-set `FRONTEND_URL=http://localhost:5173` /
+   `API_URL=http://localhost:8000`, but ZAP runs *inside its own container*
+   (`docker run ... zap-baseline.py`) — from there, `localhost` is that
+   container, not the GitHub Actions runner where docker-compose actually
+   published those ports. Every single run failed outright ("Connection
+   refused" from inside the ZAP container, confirmed in the raw log) — the
+   script's `|| true` swallowed the failure, no report files were ever
+   written, and `actions/upload-artifact` "succeeded" by silently uploading
+   nothing. Fixed by removing the override: `zap-scan.sh`'s own default
+   (`http://host.docker.internal:...`, backed by `--add-host
+   host.docker.internal:host-gateway`) is exactly right for this.
+2. With connectivity fixed, the very next run failed a *different* way:
+   `PermissionError: [Errno 13] Permission denied: '/zap/wrk/*.html'` — the
+   zaproxy image writes reports as a container-internal UID that doesn't own
+   the bind-mounted host directory. Fixed with `chmod 777` on the report
+   directory right after creating it (the reports carry nothing sensitive,
+   so world-writable on a CI runner is a non-issue). Also added
+   `if-no-files-found: error` on the upload step so either failure mode
+   fails loudly from now on instead of silently "succeeding" with nothing.
+
+**Verified with a real, clean CI-run report** after both fixes — same
+result as the findings documented above: 1 Medium (the accepted
+`style-src 'unsafe-inline'`), 5 Low (timestamp-shaped bundle noise), the
+rest Informational; the API scan's ~60 "Client Error" entries are ZAP's
+spider probing undocumented/base paths through Kong, exactly the expected
+404/401 boundary behavior for an unauthenticated scan.
 
 ## Per-user API key encryption
 
@@ -168,7 +202,10 @@ Python backend and TypeScript frontend as one project, wired to
 SonarCloud project (CI-based analysis, `SONAR_TOKEN`/`SONAR_HOST_URL` repo
 secrets + `SONAR_ENABLED=true`, `sonar.organization` in the properties file)
 — the `SonarQube` job in `security.yml` actually runs the scan now rather
-than being skipped.
+than being skipped. (That first real run's own annotations flagged
+`SonarSource/sonarqube-scan-action@v4` as unsupported with a known
+vulnerability — bumped to `v8.2.1`, which also happened to clear an
+unrelated Node-20-deprecation warning from the action's internal steps.)
 
 **Real result, first live scan**: Quality Gate A across the board — 0 bugs,
 0 vulnerabilities, 0 security hotspots, 0% duplication, 70.5% coverage. 26
