@@ -163,17 +163,29 @@ don't just configure it" treatment as everything else here:
 
 [`sonar-project.properties`](../sonar-project.properties) covers both the
 Python backend and TypeScript frontend as one project, wired to
-`backend/coverage.xml` (`pytest --cov=app --cov-report=xml`, 90% coverage as
-of Phase 9) and `frontend/coverage/lcov.info` (`npm run test:coverage`).
+`backend/coverage.xml` (`pytest --cov=app --cov-report=xml`) and
+`frontend/coverage/lcov.info` (`npm run test:coverage`). Connected to a real
+SonarCloud project (CI-based analysis, `SONAR_TOKEN`/`SONAR_HOST_URL` repo
+secrets + `SONAR_ENABLED=true`, `sonar.organization` in the properties file)
+— the `SonarQube` job in `security.yml` actually runs the scan now rather
+than being skipped.
 
-**Not run against a live server in this environment** — that needs an actual
-SonarQube/SonarCloud instance and a token, which is a one-time setup a human
-needs to do (create the project, generate `SONAR_TOKEN`, set it and
-`SONAR_HOST_URL` as repo secrets, and set the `SONAR_ENABLED` repo variable to
-`true` to turn on the CI job). The scanner config itself — source/test paths,
-coverage report paths, exclusions — is written and the coverage reports it
-needs are proven to generate correctly; only the server-side connection is
-unverified here.
+**Real result, first live scan**: Quality Gate A across the board — 0 bugs,
+0 vulnerabilities, 0 security hotspots, 0% duplication, 70.5% coverage. 26
+code smells, none security- or correctness-related, clustered as:
+- FastAPI routes with a `response_model=` that's redundant with the
+  handler's own return-type annotation (`chat.py`, `documents.py`,
+  `llm_settings.py`)
+- React components whose props type isn't `Readonly<...>`
+- A few nested ternaries worth extracting (`VoiceConversationOverlay.tsx`,
+  `MessageBubble.tsx`)
+- Helm templates missing a storage `request` or pinning `:latest` instead of
+  a real tag (`infra/helm/templates/**/deployment.yaml`)
+- One over-broad test assertion, one cognitive-complexity function
+  (`api/sse.ts`), one stray `TODO`, a couple of minor style rules
+
+None of these gate anything — logged here as the known, low-priority
+maintainability backlog SonarCloud found, not fixed as part of connecting it.
 
 ## Voice chat
 
